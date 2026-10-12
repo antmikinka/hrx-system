@@ -126,3 +126,65 @@ check.scenario @wide_snapshot_reduction_values {
   }
   check.return
 }
+
+// Each workitem retains a wide computed snapshot across a barrier. A second
+// workgroup makes the launch coordinates observable when allocation needs
+// private spill storage for that snapshot.
+kernel.def @computed_snapshot_across_barrier() {
+  %unit = index.constant 1 : index
+  %groups = index.constant 2 : index
+  %width = index.constant 64 : index
+  kernel.launch.config workgroups(%groups, %unit, %unit) workgroup_size(%width, %unit, %unit) : index
+} launch(%input: buffer, %output: buffer) {
+  %group = kernel.workgroup.id<x> : index
+  %lane = kernel.workitem.id<x> : index
+  %width = index.constant 64 : index
+  %group_begin = index.mul %group, %width : index
+  %workitem = index.add %group_begin, %lane : index
+  %stride = index.constant 1056 : index
+  %position = index.mul %workitem, %stride : index
+  %offset = index.cast %position : index to offset
+  %source = buffer.view %input[%offset] : buffer -> view<264xi32>
+  %destination = buffer.view %output[%offset] : buffer -> view<264xi32>
+  %loaded = vector.load %source[0] : view<264xi32> -> vector<264xi32>
+  %bias = scalar.constant 7 : i32
+  %biases = vector.splat %bias : vector<264xi32>
+  %captured = vector.addi %loaded, %biases : vector<264xi32>
+  kernel.barrier<workgroup> scope(workgroup) ordering(acq_rel)
+  %begin = index.constant 0 : index
+  %end = index.constant 264 : index
+  %step = index.constant 1 : index
+  scf.for %element = [%begin to %end step %step] unroll(%end) {
+    %value = vector.extract %captured[%element] : vector<264xi32> -> i32
+    view.store %value, %destination[%element] : i32, view<264xi32>
+  }
+  kernel.return
+}
+
+func.def @computed_snapshot_across_barrier_oracle(%input: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %source = buffer.view %input[%base] : buffer -> view<33792xi32>
+  %destination = buffer.view %output[%base] : buffer -> view<33792xi32>
+  %begin = index.constant 0 : index
+  %end = index.constant 33792 : index
+  %step = index.constant 1 : index
+  %bias = scalar.constant 7 : i32
+  scf.for %element = [%begin to %end step %step] {
+    %value = view.load %source[%element] : view<33792xi32> -> i32
+    %result = scalar.addi %value, %bias : i32
+    view.store %result, %destination[%element] : i32, view<33792xi32>
+  }
+  func.return
+}
+
+check.scenario @computed_snapshot_across_barrier_values {
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.generate.iota offset(-17001) step(3) : tensor<33792xi32>
+    %output = check.generate.fill value(-1) : tensor<33792xi32>
+    check.compare<@computed_snapshot_across_barrier, @computed_snapshot_across_barrier_oracle>(%input, %output) : (tensor<33792xi32>, tensor<33792xi32>) -> () {
+      check.expect.bitwise actual(%input) expected(%input) : tensor<33792xi32>
+      check.expect.bitwise actual(%output) expected(%output) : tensor<33792xi32>
+    }
+  }
+  check.return
+}
