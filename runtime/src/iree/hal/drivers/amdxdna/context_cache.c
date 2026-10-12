@@ -268,6 +268,15 @@ void iree_hal_amdxdna_device_context_cache_destroy(
   iree_allocator_free(host_allocator, context_cache);
 }
 
+iree_host_size_t iree_hal_amdxdna_device_context_cache_count(
+    iree_hal_amdxdna_device_context_cache_t* context_cache) {
+  if (!context_cache) return 0;
+  iree_slim_mutex_lock(&context_cache->mutex);
+  const iree_host_size_t count = context_cache->count;
+  iree_slim_mutex_unlock(&context_cache->mutex);
+  return count;
+}
+
 void iree_hal_amdxdna_device_context_cache_clear(
     iree_hal_amdxdna_device_context_cache_t* context_cache) {
   if (!context_cache) return;

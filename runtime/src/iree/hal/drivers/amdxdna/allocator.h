@@ -15,6 +15,13 @@
 extern "C" {
 #endif  // __cplusplus
 
+// Model unload drops the reuse cache and ignores further releases until the
+// next executable is created. active != 0 resumes reuse. Other allocator
+// types are ignored.
+// Returns 1 when this release drops the last live executable.
+int iree_hal_amdxdna_allocator_set_model_reuse(iree_hal_allocator_t* allocator,
+                                               int active);
+
 // Creates a buffer allocator used for persistent allocations.
 iree_status_t iree_hal_amdxdna_allocator_create(
     iree_allocator_t host_allocator,

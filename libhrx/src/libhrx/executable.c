@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include "hrx_internal.h"
+#include "iree/hal/drivers/amdxdna/allocator.h"
+#include "iree/hal/drivers/amdxdna/device.h"
 #include "iree/hal/executable/amdgpu/executable_target.h"
 
 static iree_status_t hrx_executable_select_target(
@@ -125,6 +127,8 @@ static hrx_status_t hrx_executable_wrap(hrx_device_t device,
   value->export_count = export_count;
   value->export_names = export_names;
   hrx_device_retain(device);
+  iree_hal_amdxdna_allocator_set_model_reuse(device->allocator.hal_allocator,
+                                             /*active=*/1);
   *executable = value;
   return hrx_ok_status();
 }
@@ -243,11 +247,19 @@ void hrx_executable_release(hrx_executable_t executable) {
   if (!executable) return;
   iree_hal_executable_t* hal_executable = executable->hal_executable;
   hrx_device_t device = executable->device;
-  if (iree_atomic_ref_count_dec(&executable->ref_count) == 1) {
+  const int last_ref = iree_atomic_ref_count_dec(&executable->ref_count) == 1;
+  if (last_ref) {
     iree_allocator_free(iree_allocator_system(), executable->export_names);
     iree_allocator_free(iree_allocator_system(), executable);
   }
+  // Release the HAL executable first so its commands drop code slots while
+  // the hardware context is still alive.
   iree_hal_executable_release(hal_executable);
+  if (last_ref &&
+      iree_hal_amdxdna_allocator_set_model_reuse(
+          device->allocator.hal_allocator, /*active=*/0)) {
+    iree_hal_amdxdna_device_release_model_contexts(device->hal_device);
+  }
   hrx_device_release(device);
 }
 
