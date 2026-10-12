@@ -57,6 +57,9 @@ iree_status_t loom_low_storage_layout_hoist_reservations(
           }
           status = loom_rewriter_move_before(&rewriter, op, insertion_op);
         }
+      } else if (op == insertion_op &&
+                 (loom_low_live_in_isa(op) || loom_low_resource_isa(op))) {
+        insertion_op = next_op;
       }
       op = next_op;
     }

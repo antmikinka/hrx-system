@@ -70,7 +70,8 @@ iree_host_size_t loom_low_storage_space_set_names(
     iree_string_view_t* out_names);
 
 // Hoists static reservations in a verified low function |body| into its entry
-// prefix, preserving their original function body order and SSA identities.
+// prefix after its live-in/resource declarations, preserving their original
+// function body order and SSA identities.
 // Frame construction calls this before target lowering embeds storage offsets.
 // Subsequent spill reservations can then append to the prefix without changing
 // the offsets of existing storage, including target-merged storage spaces.

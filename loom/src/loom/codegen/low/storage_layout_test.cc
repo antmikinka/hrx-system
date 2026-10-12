@@ -12,6 +12,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/registers.h"
 
 namespace loom {
 namespace {
@@ -239,6 +240,15 @@ TEST_F(LowStorageLayoutTest, EmptyFunctionNeedsNoHandleIndex) {
 TEST_F(LowStorageLayoutTest, HoistsReservationsPreservingLayoutAndViews) {
   loom_region_t* body = loom_low_func_def_body(function_op_);
   loom_block_t* entry = loom_region_entry_block(body);
+  loom_string_id_t source = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&body_builder_, IREE_SV("input"), &source));
+  loom_op_t* live_in = nullptr;
+  IREE_ASSERT_OK(loom_low_live_in_build(
+      &body_builder_, 0, source, loom_named_attr_slice_t{},
+      loom_low_register_type(/*descriptor_set_stable_id=*/1,
+                             /*register_class_id=*/0, /*unit_count=*/1),
+      LOOM_LOCATION_UNKNOWN, &live_in));
   const loom_value_id_t stack = Reserve(LOOM_STORAGE_SPACE_STACK, 16, 8);
   const loom_value_id_t entry_view = View(stack, 4, 8);
   const loom_value_id_t private_storage =
@@ -267,7 +277,8 @@ TEST_F(LowStorageLayoutTest, HoistsReservationsPreservingLayoutAndViews) {
                                       aligned_stack};
   loom_low_storage_layout_builder_t builder;
   loom_low_storage_layout_builder_initialize(&builder);
-  loom_op_t* op = entry->first_op;
+  ASSERT_EQ(entry->first_op, live_in);
+  loom_op_t* op = live_in->next_op;
   for (loom_value_id_t value : expected) {
     ASSERT_NE(op, nullptr);
     ASSERT_TRUE(loom_low_storage_reserve_isa(op));

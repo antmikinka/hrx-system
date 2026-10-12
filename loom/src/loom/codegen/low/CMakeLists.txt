@@ -429,6 +429,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::ir
     loom::ops::low
+    loom::target::registers
 )
 
 loom_cc_library(
