@@ -118,9 +118,9 @@ low.func.def target<amdgpu.rdna3.core>(@target) @conservative_scratch_stores_do_
 }
 
 // ----
-  scratch_store_b32 v3, v0, off offset:0 glc:0 slc:0 dlc:0
-  scratch_store_b32 v1, v2, off offset:0 glc:0 slc:0 dlc:0
-  scratch_load_b32 v0, v3, off offset:0 glc:0 slc:0 dlc:0
+  scratch_store_b32 v3, v0, off offset:0
+  scratch_store_b32 v1, v2, off offset:0
+  scratch_load_b32 v0, v3, off offset:0
   s_waitcnt vmcnt(0) lgkmcnt(63)
   global_store_b32 v3, v0, s[0:1] offset:0
   s_waitcnt_vscnt vscnt(0)
@@ -139,8 +139,8 @@ low.func.def target<amdgpu.rdna3.core>(@target) @scratch_store_load_memory_effec
 }
 
 // ----
-  scratch_store_b32 v1, v0, off offset:0 glc:0 slc:0 dlc:0
-  scratch_load_b32 v0, v1, off offset:0 glc:0 slc:0 dlc:0
+  scratch_store_b32 v1, v0, off offset:0
+  scratch_load_b32 v0, v1, off offset:0
   s_waitcnt vmcnt(0) lgkmcnt(63)
   global_store_b32 v1, v0, s[0:1] offset:0
   s_waitcnt_vscnt vscnt(0)
@@ -604,10 +604,10 @@ low.func.def target<amdgpu.rdna3.core>(@target) @scratch_store_load_cross_block_
 }
 
 // ----
-  scratch_store_b32 v1, v0, off offset:0 glc:0 slc:0 dlc:0
+  scratch_store_b32 v1, v0, off offset:0
 .Lbb1:
   s_waitcnt_vscnt vscnt(0)
-  scratch_load_b32 v0, v1, off offset:0 glc:0 slc:0 dlc:0
+  scratch_load_b32 v0, v1, off offset:0
   s_waitcnt vmcnt(0) lgkmcnt(63)
   global_store_b32 v1, v0, s[0:1] offset:0
   s_waitcnt_vscnt vscnt(0)
@@ -887,11 +887,11 @@ low.func.def target<amdgpu.rdna3.core>(@target) @scratch_store_load_backedge_mem
 // ----
 .Lbb1:
   s_waitcnt_vscnt vscnt(0)
-  scratch_load_b32 v2, v1, off offset:0 glc:0 slc:0 dlc:0
+  scratch_load_b32 v2, v1, off offset:0
   s_cbranch_scc0 .Lbb3
 .Lbb2:
   s_waitcnt vmcnt(0) lgkmcnt(63)
-  scratch_store_b32 v1, v0, off offset:0 glc:0 slc:0 dlc:0
+  scratch_store_b32 v1, v0, off offset:0
   s_branch .Lbb1
 .Lbb3:
   s_waitcnt vmcnt(0) lgkmcnt(63)
@@ -918,11 +918,11 @@ low.func.def target<amdgpu.rdna3.core>(@target) @exec_state_packets_preserve_scr
 // VMEM stores from the memory frontier. Same-wave scratch ordering lets the
 // reload issue without completing the store; program exit still drains it.
 // ----
-  scratch_store_b32 off, v0, off offset:0 glc:0 slc:0 dlc:0
+  scratch_store_b32 off, v0, off offset:0
   s_mov_b64 exec, s[0:1]
   s_mov_b64_exec_read s[0:1]
   s_mov_b64 exec, -1
-  scratch_load_b32 v0, off, off offset:0 glc:0 slc:0 dlc:0
+  scratch_load_b32 v0, off, off offset:0
   s_waitcnt vmcnt(0) lgkmcnt(63)
   global_store_b32 v1, v0, s[2:3] offset:0
   s_waitcnt_vscnt vscnt(0)
@@ -1249,12 +1249,12 @@ low.func.def target<amdgpu.rdna3.core>(@target) @scratch_completion_chain_preser
 }
 
 // ----
-  scratch_store_b32 v1, v0, off offset:0 glc:0 slc:0 dlc:0
-  scratch_store_b32 v1, v0, off offset:4 glc:0 slc:0 dlc:0
-  scratch_load_b32 v2, v1, off offset:0 glc:0 slc:0 dlc:0
-  scratch_store_b32 v1, v0, off offset:0 glc:0 slc:0 dlc:0
-  scratch_store_b32 v1, v0, off offset:4 glc:0 slc:0 dlc:0
-  scratch_load_b32 v0, v1, off offset:0 glc:0 slc:0 dlc:0
+  scratch_store_b32 v1, v0, off offset:0
+  scratch_store_b32 v1, v0, off offset:4
+  scratch_load_b32 v2, v1, off offset:0
+  scratch_store_b32 v1, v0, off offset:0
+  scratch_store_b32 v1, v0, off offset:4
+  scratch_load_b32 v0, v1, off offset:0
   s_waitcnt vmcnt(0) lgkmcnt(63)
   v_add_u32 v0, v2, v0
   global_store_b32 v1, v0, s[0:1] offset:0

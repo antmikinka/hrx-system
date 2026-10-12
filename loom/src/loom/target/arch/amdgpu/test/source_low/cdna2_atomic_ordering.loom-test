@@ -1,0 +1,161 @@
+// RUN: emit source-low target=amdgpu:gfx90a output=low
+
+// A workgroup shares the ordered L1; publication still completes LDS traffic.
+func.def @workgroup_publication(%storage: buffer) -> (i32) {
+  %global = buffer.assume.memory_space<global> %storage : buffer
+  %base = index.constant 0 : offset
+  %words = buffer.view %global[%base] : buffer -> view<2xi32>
+  %value = scalar.constant 1 : i32
+  view.atomic.store %value, %words[0] {ordering = seq_cst, scope = workgroup} : i32, view<2xi32>
+  %observed = view.atomic.load %words[1] {ordering = seq_cst, scope = workgroup} : view<2xi32> -> i32
+  %old = view.atomic.rmw<addi> %observed, %words[0] {ordering = acq_rel, scope = workgroup} : i32, view<2xi32> -> i32
+  buffer.fence scope(workgroup) ordering(acq_rel)
+  func.return %old : i32
+}
+
+// ----
+low.func.def target<amdgpu.cdna2.core> abi(hal_kernel) @workgroup_publication() -> (reg<amdgpu.vgpr>) asm {
+  %words = resource<hal_binding> {extent = 8, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  s_waitcnt {lgkmcnt = 0}
+  %11 = v_mov_b32 1
+  %12 = v_mov_b32 0
+  global_store_dword_saddr<volatile> %12, %11, %words
+  s_waitcnt {lgkmcnt = 0}
+  %observed = global_load_dword_saddr<volatile> %12, %words {offset = 4}
+  s_waitcnt {vmcnt = 0}
+  s_waitcnt {lgkmcnt = 0}
+  %old = global_atomic_add_rtn_saddr %12, %observed, %words
+  s_waitcnt {vmcnt = 0}
+  s_waitcnt {lgkmcnt = 0}
+  s_waitcnt {vmcnt = 0}
+  return %old
+}
+
+// ====
+
+// Device acquisition refreshes L1 without system-only L2 maintenance.
+func.def @device_publication(%storage: buffer) -> (i32) {
+  %global = buffer.assume.memory_space<global> %storage : buffer
+  %base = index.constant 0 : offset
+  %words = buffer.view %global[%base] : buffer -> view<2xi32>
+  %value = scalar.constant 1 : i32
+  view.atomic.store %value, %words[0] {ordering = seq_cst, scope = device} : i32, view<2xi32>
+  %observed = view.atomic.load %words[1] {ordering = seq_cst, scope = device} : view<2xi32> -> i32
+  %old = view.atomic.rmw<addi> %observed, %words[0] {ordering = acq_rel, scope = device} : i32, view<2xi32> -> i32
+  buffer.fence scope(device) ordering(acq_rel)
+  func.return %old : i32
+}
+
+// ----
+low.func.def target<amdgpu.cdna2.core> abi(hal_kernel) @device_publication() -> (reg<amdgpu.vgpr>) asm {
+  %words = resource<hal_binding> {extent = 8, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  s_waitcnt {lgkmcnt = 0}
+  s_waitcnt {vmcnt = 0}
+  s_waitcnt {vmcnt = 0}
+  %11 = v_mov_b32 1
+  %12 = v_mov_b32 0
+  global_store_dword_saddr<volatile> %12, %11, %words
+  s_waitcnt {lgkmcnt = 0}
+  s_waitcnt {vmcnt = 0}
+  s_waitcnt {vmcnt = 0}
+  %observed = global_load_dword_saddr<volatile> %12, %words {offset = 4, glc = 1}
+  s_waitcnt {vmcnt = 0}
+  buffer_wbinvl1_vol
+  s_waitcnt {lgkmcnt = 0}
+  %old = global_atomic_add_rtn_saddr %12, %observed, %words
+  s_waitcnt {vmcnt = 0}
+  buffer_wbinvl1_vol
+  s_waitcnt {lgkmcnt = 0}
+  s_waitcnt {vmcnt = 0}
+  s_waitcnt {vmcnt = 0}
+  s_waitcnt {vmcnt = 0}
+  buffer_wbinvl1_vol
+  return %old
+}
+
+// ====
+
+// System release writes back L2; acquisition invalidates L2 before L1.
+func.def @system_publication(%storage: buffer) -> (i32) {
+  %global = buffer.assume.memory_space<global> %storage : buffer
+  %base = index.constant 0 : offset
+  %words = buffer.view %global[%base] : buffer -> view<2xi32>
+  %value = scalar.constant 1 : i32
+  view.atomic.store %value, %words[0] {ordering = seq_cst, scope = system} : i32, view<2xi32>
+  %observed = view.atomic.load %words[1] {ordering = seq_cst, scope = system} : view<2xi32> -> i32
+  %old = view.atomic.rmw<addi> %observed, %words[0] {ordering = acq_rel, scope = system} : i32, view<2xi32> -> i32
+  buffer.fence scope(system) ordering(acq_rel)
+  func.return %old : i32
+}
+
+// ----
+low.func.def target<amdgpu.cdna2.core> abi(hal_kernel) @system_publication() -> (reg<amdgpu.vgpr>) asm {
+  %words = resource<hal_binding> {extent = 8, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  s_waitcnt {lgkmcnt = 0}
+  buffer_wbl2
+  s_waitcnt {vmcnt = 0}
+  %11 = v_mov_b32 1
+  %12 = v_mov_b32 0
+  global_store_dword_saddr<volatile> %12, %11, %words
+  s_waitcnt {lgkmcnt = 0}
+  buffer_wbl2
+  s_waitcnt {vmcnt = 0}
+  %observed = global_load_dword_saddr<volatile> %12, %words {offset = 4, glc = 1}
+  s_waitcnt {vmcnt = 0}
+  buffer_invl2
+  buffer_wbinvl1_vol
+  s_waitcnt {lgkmcnt = 0}
+  buffer_wbl2
+  s_waitcnt {vmcnt = 0}
+  %old = global_atomic_add_rtn_saddr %12, %observed, %words
+  s_waitcnt {vmcnt = 0}
+  buffer_invl2
+  buffer_wbinvl1_vol
+  s_waitcnt {lgkmcnt = 0}
+  buffer_wbl2
+  s_waitcnt {vmcnt = 0}
+  s_waitcnt {vmcnt = 0}
+  buffer_invl2
+  buffer_wbinvl1_vol
+  return %old
+}
+
+// ====
+
+// A generic compare-exchange may complete through LDS or global memory.
+// Failure acquisition must preserve both paths and system cache visibility.
+func.def @generic_compare_exchange(%storage: buffer) -> (i64) {
+  %generic = buffer.assume.memory_space<generic> %storage : buffer
+  %base = index.constant 0 : offset
+  %word = buffer.view %generic[%base] : buffer -> view<1xi64>
+  %expected = scalar.constant 4294967299 : i64
+  %replacement = scalar.constant 8589934597 : i64
+  %old = view.atomic.cmpxchg %expected, %replacement, %word[0] {failure_ordering = acquire, scope = system, success_ordering = acq_rel} : i64, view<1xi64> -> i64
+  func.return %old : i64
+}
+
+// ----
+low.func.def target<amdgpu.cdna2.core> abi(hal_kernel) @generic_compare_exchange() -> (reg<amdgpu.vgpr x2>) asm {
+  %word = resource<hal_binding> {extent = 8, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %16 = slice %word[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %17 = slice %word[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %18 = v_mov_b32_copy %16
+  %19 = v_mov_b32_copy %17
+  %20 = concat(%18, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  s_waitcnt {lgkmcnt = 0}
+  buffer_wbl2
+  s_waitcnt {vmcnt = 0}
+  %21 = v_mov_b32 3
+  %22 = v_mov_b32 1
+  %23 = concat(%21, %22) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %24 = v_mov_b32 5
+  %25 = v_mov_b32 2
+  %26 = concat(%24, %25) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %27 = concat(%26, %23) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
+  %old = flat_atomic_cmpswap_x2_rtn %20, %27 : reg<amdgpu.vgpr x2>
+  s_waitcnt {vmcnt = 0}
+  s_waitcnt {lgkmcnt = 0}
+  buffer_invl2
+  buffer_wbinvl1_vol
+  return %old
+}

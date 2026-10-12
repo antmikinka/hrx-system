@@ -49,7 +49,12 @@ typedef struct loom_amdgpu_memory_coherence_rule_t {
   // Completion required after writeback.
   uint32_t writeback_wait_mask;
   // Cache invalidation packets, in issue order.
-  loom_amdgpu_descriptor_ref_t invalidates[2];
+  struct {
+    // Cache-control instruction for this level of the hierarchy.
+    loom_amdgpu_descriptor_ref_t descriptor_ref;
+    // Narrowest visibility scope that requires this invalidation.
+    uint8_t minimum_scope;
+  } invalidates[2];
   // Number of populated cache invalidation packets.
   uint8_t invalidate_count;
   // Completion required after invalidation, or zero for ordered invalidates.

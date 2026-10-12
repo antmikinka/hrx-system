@@ -230,6 +230,7 @@ iree_py_library(
     deps = [
         ":encoding_info",
         ":isa_xml",
+        ":matrix_contracts",
         ":matrix_formats",
         ":target_info",
         "//loom/py/loom/target:low_descriptors",

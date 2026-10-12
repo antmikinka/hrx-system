@@ -31,8 +31,10 @@ static const loom_amdgpu_memory_coherence_rule_t kMemoryCoherenceRules[] = {
             .release_wait_count = 2,
             .local_wait_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS |
                                LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM,
-            .invalidates = {LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_GL1_INV,
-                            LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_GL0_INV},
+            .invalidates = {{.descriptor_ref =
+                                 LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_GL1_INV},
+                            {.descriptor_ref =
+                                 LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_GL0_INV}},
             .invalidate_count = 2,
             // WGP waves can use different GL0 caches. Complete both memory
             // paths before publication and invalidate GL0 after acquisition.
@@ -100,7 +102,8 @@ static const loom_amdgpu_memory_coherence_rule_t kMemoryCoherenceRules[] = {
             .writeback = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_WB,
             .writeback_scope = LOOM_CACHE_SCOPE_SYSTEM,
             .writeback_wait_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_STORE,
-            .invalidates = {LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_INV},
+            .invalidates = {{.descriptor_ref =
+                                 LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_INV}},
             .invalidate_count = 1,
             .workgroup =
                 {
@@ -165,7 +168,8 @@ static const loom_amdgpu_memory_coherence_rule_t kMemoryCoherenceRules[] = {
             .writeback = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_WB,
             .writeback_scope = LOOM_CACHE_SCOPE_DEVICE,
             .writeback_wait_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_STORE,
-            .invalidates = {LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_INV},
+            .invalidates = {{.descriptor_ref =
+                                 LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_INV}},
             .invalidate_count = 1,
             .invalidate_wait_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD,
             // The CU cache is shared, but its ports do not order one another.
@@ -227,9 +231,48 @@ static const loom_amdgpu_memory_coherence_rule_t kMemoryCoherenceRules[] = {
             .writeback = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_WBL2,
             .writeback_scope = LOOM_CACHE_SCOPE_DEVICE,
             .writeback_wait_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_STORE,
-            .invalidates = {LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_INV},
+            .invalidates = {{.descriptor_ref =
+                                 LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_INV}},
             .invalidate_count = 1,
             // With TgSplit disabled the workgroup shares an ordered L1.
+            .workgroup =
+                {
+                    .cache_scope = LOOM_CACHE_SCOPE_WORKGROUP,
+                    .release_wait_masks = {LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS |
+                                           LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM},
+                    .release_wait_count = 1,
+                },
+        },
+    [LOOM_AMDGPU_MEMORY_ORDERING_MODEL_CDNA2] =
+        {
+            // CDNA2 L1 is write-through. Loads observing other CUs bypass it;
+            // atomic updates already bypass L1 and use GLC for return control.
+            .load_attrs =
+                {
+                    [LOOM_CACHE_SCOPE_DEVICE] =
+                        LOOM_AMDGPU_MEMORY_COHERENCE_ATTR_GLC,
+                    [LOOM_CACHE_SCOPE_SYSTEM] =
+                        LOOM_AMDGPU_MEMORY_COHERENCE_ATTR_GLC,
+                },
+            .release_wait_masks = {LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS |
+                                   LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM},
+            .release_wait_count = 1,
+            .local_wait_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS |
+                               LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM,
+            .writeback = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_WBL2,
+            .writeback_scope = LOOM_CACHE_SCOPE_SYSTEM,
+            .writeback_wait_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_STORE,
+            // System acquisition refreshes remote/noncoherent L2 lines before
+            // L1. Device acquisition needs only L1; both operations order
+            // subsequent vector accesses without a following wait.
+            .invalidates = {{.descriptor_ref =
+                                 LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_INVL2,
+                             .minimum_scope = LOOM_CACHE_SCOPE_SYSTEM},
+                            {.descriptor_ref =
+                                 LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_WBINVL1_VOL,
+                             .minimum_scope = LOOM_CACHE_SCOPE_DEVICE}},
+            .invalidate_count = 2,
+            // TgSplit is disabled, so all workgroup waves share the ordered L1.
             .workgroup =
                 {
                     .cache_scope = LOOM_CACHE_SCOPE_WORKGROUP,

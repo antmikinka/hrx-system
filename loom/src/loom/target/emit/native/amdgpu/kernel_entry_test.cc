@@ -50,8 +50,11 @@ TEST(AmdgpuKernelEntryTest, SelectsInitialVmemReplayEnvelope) {
   properties.kernel_entry.profile =
       LOOM_AMDGPU_KERNEL_ENTRY_PROFILE_INITIAL_VMEM_REPLAY;
 
-  const loom_amdgpu_kernel_entry_envelope_t* envelope =
-      loom_amdgpu_kernel_entry_envelope_for_properties(&properties);
+  TestArena arena;
+  const loom_amdgpu_hal_kernel_abi_verify_result_t abi = {};
+  const loom_amdgpu_kernel_entry_envelope_t* envelope = nullptr;
+  IREE_ASSERT_OK(loom_amdgpu_kernel_entry_envelope_build(
+      &properties, &abi, 0, &envelope, arena.arena()));
   EXPECT_EQ(std::string(envelope->assembly.data, envelope->assembly.size),
             kExpectedAssembly);
   ASSERT_EQ(envelope->text.data_length, sizeof(kExpectedText));
@@ -64,12 +67,48 @@ TEST(AmdgpuKernelEntryTest, SelectsInitialVmemReplayEnvelope) {
   EXPECT_EQ(envelope->minimum_vgpr_count, 1u);
 }
 
+TEST(AmdgpuKernelEntryTest, InitializesAbsoluteFlatScratchFromRetainedLaunch) {
+  TestArena arena;
+  loom_amdgpu_processor_properties_t properties = {};
+  properties.kernel_descriptor.flags =
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_USER_FLAT_SCRATCH_INIT;
+  const loom_amdgpu_hal_kernel_abi_verify_result_t abi = {
+      .user_sgpr_count = 6,
+      .flat_scratch_sgprs = {.init = 4, .wavefront_offset = 9},
+  };
+  const loom_amdgpu_kernel_entry_envelope_t* envelope = nullptr;
+  IREE_ASSERT_OK(loom_amdgpu_kernel_entry_envelope_build(
+      &properties, &abi, 32, &envelope, arena.arena()));
+  // Independently assembled by LLVM for gfx90a in both feature modes.
+  const uint8_t expected[] = {0x04, 0x09, 0x66, 0x80, 0x05, 0x80, 0x67, 0x82};
+  EXPECT_EQ(
+      std::string(reinterpret_cast<const char*>(envelope->text.data),
+                  envelope->text.data_length),
+      std::string(reinterpret_cast<const char*>(expected), sizeof(expected)));
+  EXPECT_EQ(std::string(envelope->assembly.data, envelope->assembly.size),
+            "  s_add_u32 flat_scratch_lo, s4, s9\n"
+            "  s_addc_u32 flat_scratch_hi, s5, 0\n");
+  EXPECT_EQ(envelope->instruction_count, 2u);
+  EXPECT_EQ(envelope->minimum_sgpr_count, 10u);
+  EXPECT_EQ(envelope->minimum_vgpr_count, 0u);
+
+  IREE_ASSERT_OK(loom_amdgpu_kernel_entry_envelope_build(
+      &properties, &abi, 0, &envelope, arena.arena()));
+  EXPECT_EQ(envelope->instruction_count, 0u);
+  EXPECT_EQ(envelope->text.data_length, 0u);
+  EXPECT_EQ(envelope->assembly.size, 0u);
+  EXPECT_EQ(envelope->minimum_sgpr_count, 0u);
+}
+
 TEST(AmdgpuKernelEntryTest, PrependsTextAndDisplacesBodyFixups) {
   loom_amdgpu_processor_properties_t properties = {};
   properties.kernel_entry.profile =
       LOOM_AMDGPU_KERNEL_ENTRY_PROFILE_INITIAL_VMEM_REPLAY;
-  const loom_amdgpu_kernel_entry_envelope_t* envelope =
-      loom_amdgpu_kernel_entry_envelope_for_properties(&properties);
+  TestArena arena;
+  const loom_amdgpu_hal_kernel_abi_verify_result_t abi = {};
+  const loom_amdgpu_kernel_entry_envelope_t* envelope = nullptr;
+  IREE_ASSERT_OK(loom_amdgpu_kernel_entry_envelope_build(
+      &properties, &abi, 0, &envelope, arena.arena()));
   const uint8_t body[] = {0xaa, 0xbb, 0xcc, 0xdd, 0x00, 0x00, 0x00, 0x00};
   const loom_amdgpu_hsaco_text_fixup_t body_fixup = {
       .kind = LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_DATA_SYMBOL_REL32_LO,
@@ -79,7 +118,6 @@ TEST(AmdgpuKernelEntryTest, PrependsTextAndDisplacesBodyFixups) {
       .target_symbol_byte_offset = 12,
   };
 
-  TestArena arena;
   iree_const_byte_span_t text = iree_const_byte_span_empty();
   const loom_amdgpu_hsaco_text_fixup_t* fixups = nullptr;
   IREE_ASSERT_OK(loom_amdgpu_kernel_entry_prepend_text(
@@ -106,14 +144,16 @@ TEST(AmdgpuKernelEntryTest, PrependsTextAndDisplacesBodyFixups) {
 TEST(AmdgpuKernelEntryTest, EmptyEnvelopePreservesBodyStorage) {
   loom_amdgpu_processor_properties_t properties = {};
   properties.kernel_entry.profile = LOOM_AMDGPU_KERNEL_ENTRY_PROFILE_NONE;
-  const loom_amdgpu_kernel_entry_envelope_t* envelope =
-      loom_amdgpu_kernel_entry_envelope_for_properties(&properties);
+  TestArena arena;
+  const loom_amdgpu_hal_kernel_abi_verify_result_t abi = {};
+  const loom_amdgpu_kernel_entry_envelope_t* envelope = nullptr;
+  IREE_ASSERT_OK(loom_amdgpu_kernel_entry_envelope_build(
+      &properties, &abi, 0, &envelope, arena.arena()));
   const uint8_t body[] = {0x00, 0x00, 0xb0, 0xbf};
   const loom_amdgpu_hsaco_text_fixup_t body_fixup = {
       .kind = LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_DATA_SYMBOL_REL32_LO,
   };
 
-  TestArena arena;
   iree_const_byte_span_t text = iree_const_byte_span_empty();
   const loom_amdgpu_hsaco_text_fixup_t* fixups = nullptr;
   IREE_ASSERT_OK(loom_amdgpu_kernel_entry_prepend_text(

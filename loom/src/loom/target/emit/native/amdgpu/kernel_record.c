@@ -443,8 +443,22 @@ iree_status_t loom_amdgpu_kernel_record_build(
       loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
           descriptor_flags, &system_vgpr_workitem_id));
 
-  const loom_amdgpu_kernel_entry_envelope_t* entry_envelope =
-      loom_amdgpu_kernel_entry_envelope_for_properties(&processor->properties);
+  const uint32_t private_segment_size =
+      (uint32_t)storage_layout.segment_sizes.private_segment_fixed_size;
+  if (private_segment_size != 0) {
+    descriptor_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_PRIVATE_SEGMENT;
+  }
+  const loom_amdgpu_kernel_entry_envelope_t* entry_envelope = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_entry_envelope_build(
+      &processor->properties, abi_verify, private_segment_size, &entry_envelope,
+      scratch_arena));
+  if (private_segment_size != 0 &&
+      loom_amdgpu_processor_properties_kernel_descriptor_has_flags(
+          &processor->properties,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_USER_FLAT_SCRATCH_INIT)) {
+    descriptor_flags |=
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_FLAT_SCRATCH_INIT;
+  }
   uint32_t next_free_sgpr = preflight->next_free_sgpr > user_sgpr_count
                                 ? preflight->next_free_sgpr
                                 : user_sgpr_count;
@@ -482,6 +496,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
       .processor = processor,
       .abi_layout = *abi_layout,
       .storage_layout = storage_layout,
+      .entry_envelope = entry_envelope,
       .metadata =
           {
               .name = symbol,

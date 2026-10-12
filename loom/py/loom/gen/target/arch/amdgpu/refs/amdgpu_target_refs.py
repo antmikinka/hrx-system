@@ -405,7 +405,10 @@ def _validate_spill_lowering_descriptor_contracts(
     descriptor_set: DescriptorSet,
 ) -> None:
     requires_m0_materialization = False
+    descriptor_keys = {descriptor.key for descriptor in descriptor_set.descriptors}
     for descriptor_key in _SPILL_LOWERING_SCRATCH_DESCRIPTOR_KEYS:
+        if descriptor_key.endswith("_offset_only") and descriptor_key not in descriptor_keys:
+            continue
         descriptor = _descriptor_by_key(descriptor_set, descriptor_key)
         _validate_spill_lowering_descriptor_shape(descriptor_set, descriptor)
         offset_slot = _descriptor_address_offset_immediate_slot(descriptor_set, descriptor)

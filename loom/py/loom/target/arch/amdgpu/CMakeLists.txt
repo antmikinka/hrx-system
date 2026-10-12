@@ -263,6 +263,7 @@ iree_py_library(
   DEPS
     loom::py::loom::target::arch::amdgpu::encoding_info
     loom::py::loom::target::arch::amdgpu::isa_xml
+    loom::py::loom::target::arch::amdgpu::matrix_contracts
     loom::py::loom::target::arch::amdgpu::matrix_formats
     loom::py::loom::target::arch::amdgpu::target_info
     loom::py::loom::target::low_descriptors

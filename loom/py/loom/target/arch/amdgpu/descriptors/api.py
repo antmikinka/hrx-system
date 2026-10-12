@@ -1430,6 +1430,11 @@ _GFX125X_EXTRA_DESCRIPTORS = (
 
 
 _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS = {
+    "cdna2": _AmdgpuCoreDescriptorSetBuilder(
+        base=_AMDGPU_CDNA2_CORE_DESCRIPTOR_SET_BASE,
+        overlay_rows=_gfx90a_core_overlays,
+        overlay_descriptors=_gfx90a_core_overlay_descriptors,
+    ),
     "cdna3": _AmdgpuCoreDescriptorSetBuilder(
         base=_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
         overlay_rows=_gfx940_core_overlays,

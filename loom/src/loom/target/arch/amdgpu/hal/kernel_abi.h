@@ -20,6 +20,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
@@ -329,8 +330,15 @@ typedef struct loom_amdgpu_hal_kernel_abi_verify_result_t {
   // Launch workgroup-coordinate state required by the verified low function.
   loom_amdgpu_hal_kernel_abi_launch_workgroup_id_flags_t
       launch_workgroup_id_flags;
-  // Number of hidden user SGPRs consumed by verified ABI live-ins.
+  // User SGPR extent, including padding for optional flat-scratch inputs.
   uint32_t user_sgpr_count;
+  // Launch registers consumed by the entry prologue on legacy flat scratch.
+  struct {
+    // First register of the two-SGPR absolute scratch base.
+    uint32_t init;
+    // Register holding the byte offset of this wave's scratch allocation.
+    uint32_t wavefront_offset;
+  } flat_scratch_sgprs;
   // Fixed physical values retained from verified ABI live-ins.
   loom_low_allocation_fixed_value_t
       fixed_values[LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_FIXED_VALUE_COUNT];
@@ -342,10 +350,12 @@ typedef struct loom_amdgpu_hal_kernel_abi_verify_result_t {
 //
 // Status is reserved for diagnostic emission and table-allocation failures.
 // User-visible ABI violations are emitted through |emitter| and counted in
-// |out_result|.
+// |out_result|. |properties| supplies the resolved processor's launch layout;
+// it may be NULL for a representation-only function without a processor.
 iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
     const loom_module_t* module, const loom_op_t* function_op,
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t max_errors,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_processor_properties_t* properties, uint32_t max_errors,
     iree_diagnostic_emitter_t emitter,
     loom_amdgpu_hal_kernel_abi_verify_result_t* out_result,
     iree_arena_allocator_t* arena);

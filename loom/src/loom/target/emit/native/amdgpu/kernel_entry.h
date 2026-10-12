@@ -16,6 +16,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/target/arch/amdgpu/hal/kernel_abi.h"
 #include "loom/target/arch/amdgpu/target_info_defs.h"
 #include "loom/target/emit/native/amdgpu/text_fixup.h"
 
@@ -36,11 +37,16 @@ typedef struct loom_amdgpu_kernel_entry_envelope_t {
   uint32_t minimum_vgpr_count;
 } loom_amdgpu_kernel_entry_envelope_t;
 
-// Returns the immutable hardware-entry envelope selected by |properties|.
-// Targets without an entry profile return an empty record.
-const loom_amdgpu_kernel_entry_envelope_t*
-loom_amdgpu_kernel_entry_envelope_for_properties(
-    const loom_amdgpu_processor_properties_t* properties);
+// Builds the entry envelope using the launch layout retained before allocation
+// and the final private-storage size, including spills. Static envelopes share
+// immutable storage; a scratch initializer is owned by |arena|. Targets without
+// entry instructions return an empty record.
+iree_status_t loom_amdgpu_kernel_entry_envelope_build(
+    const loom_amdgpu_processor_properties_t* properties,
+    const loom_amdgpu_hal_kernel_abi_verify_result_t* abi,
+    uint32_t private_segment_size,
+    const loom_amdgpu_kernel_entry_envelope_t** out_envelope,
+    iree_arena_allocator_t* arena);
 
 // Prepends |envelope| to |body_text| and displaces all body-relative fixups.
 // Empty envelopes return the original body storage and fixup array directly.

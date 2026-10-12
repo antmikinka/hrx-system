@@ -51,8 +51,6 @@
 #define LOOM_AMDGPU_KERNEL_CODE_PROPERTY_WAVEFRONT_SIZE32_SHIFT 10u
 #define LOOM_AMDGPU_KERNEL_CODE_PROPERTY_USES_DYNAMIC_STACK_SHIFT 11u
 
-#define LOOM_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_USER_SGPR_COUNT 2u
-
 static const loom_amdgpu_kernel_descriptor_flags_t
     kAmdgpuKernelDescriptorKnownFlags =
         LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER |
@@ -241,11 +239,14 @@ static uint32_t loom_amdgpu_kernel_descriptor_user_sgpr_count_width(
 }
 
 static uint32_t loom_amdgpu_kernel_descriptor_legacy_extra_sgpr_count(
-    const loom_amdgpu_processor_info_t* processor) {
+    const loom_amdgpu_processor_info_t* processor,
+    loom_amdgpu_kernel_descriptor_flags_t flags) {
   uint32_t count = 2u;
   if (loom_amdgpu_processor_properties_kernel_descriptor_has_flags(
           &processor->properties,
-          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH)) {
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH) ||
+      iree_any_bit_set(
+          flags, LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_FLAT_SCRATCH_INIT)) {
     count = 6u;
   } else if (loom_amdgpu_kernel_descriptor_is_xnack_on_or_any(processor)) {
     count = 4u;
@@ -430,22 +431,14 @@ iree_status_t loom_amdgpu_kernel_descriptor_encode(
       .kernel_code_entry_byte_offset = kernel_code_entry_byte_offset,
       .next_free_sgpr = metadata_kernel->sgpr_count,
       .next_free_vgpr = metadata_kernel->vgpr_count,
-      .user_sgpr_count =
-          iree_max(metadata_kernel->kernarg_segment_size != 0
-                       ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_USER_SGPR_COUNT
-                       : 0,
-                   options.minimum_user_sgpr_count),
-      .flags =
-          options.flags |
-          (metadata_kernel->kernarg_segment_size != 0
-               ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR
-               : 0) |
-          (metadata_kernel->private_segment_fixed_size != 0
-               ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_PRIVATE_SEGMENT
-               : 0) |
-          (metadata_kernel->wavefront_size == 32
-               ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32
-               : 0),
+      .user_sgpr_count = options.minimum_user_sgpr_count,
+      .flags = options.flags |
+               (metadata_kernel->private_segment_fixed_size != 0
+                    ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_PRIVATE_SEGMENT
+                    : 0) |
+               (metadata_kernel->wavefront_size == 32
+                    ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32
+                    : 0),
   };
   uint32_t user_sgpr_count_width = 0;
   uint32_t system_vgpr_workitem_id = 0;
@@ -467,7 +460,8 @@ iree_status_t loom_amdgpu_kernel_descriptor_encode(
           &processor->properties,
           LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING)) {
     const uint32_t extra_sgpr_count =
-        loom_amdgpu_kernel_descriptor_legacy_extra_sgpr_count(processor);
+        loom_amdgpu_kernel_descriptor_legacy_extra_sgpr_count(processor,
+                                                              descriptor.flags);
     if (descriptor.next_free_sgpr > UINT32_MAX - extra_sgpr_count) {
       return iree_make_status(
           IREE_STATUS_OUT_OF_RANGE,

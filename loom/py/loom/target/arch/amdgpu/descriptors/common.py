@@ -229,11 +229,6 @@ _SCHEDULE_WAIT_X = "amdgpu.wait.x"
 
 
 def _amdgpu_mfma_schedule_class_name(descriptor_key: str) -> str:
-    if not _amdgpu_mfma_has_qualified_timing(descriptor_key):
-        raise ValueError(
-            f"AMDGPU descriptor '{descriptor_key}' has no qualified GFX9.4 "
-            "matrix timing"
-        )
     return f"{_SCHEDULE_MFMA_QUALIFIED_PREFIX}{descriptor_key.removeprefix('amdgpu.')}"
 
 

@@ -167,8 +167,11 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(builder, "  .amdhsa_reserve_vcc 0\n"));
   if (!has_architected_flat_scratch) {
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-        builder, "  .amdhsa_reserve_flat_scratch 0\n"));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "  .amdhsa_reserve_flat_scratch %u\n",
+        loom_amdgpu_kernel_assembly_flag(
+            record,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_FLAT_SCRATCH_INIT)));
   }
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
       builder,
@@ -268,11 +271,8 @@ iree_status_t loom_amdgpu_emit_kernel_assembly(
       (int)record->symbol.size, record->symbol.data, (int)record->symbol.size,
       record->symbol.data, (int)record->symbol.size, record->symbol.data,
       (int)record->symbol.size, record->symbol.data));
-  const loom_amdgpu_kernel_entry_envelope_t* entry_envelope =
-      loom_amdgpu_kernel_entry_envelope_for_properties(
-          &record->processor->properties);
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_string(builder, entry_envelope->assembly));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+      builder, record->entry_envelope->assembly));
   const loom_amdgpu_assembly_fragment_options_t assembly_options = {
       .packet_plan = packet_plan,
       .storage_layout = &record->storage_layout,

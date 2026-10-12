@@ -610,9 +610,11 @@ static iree_status_t loom_amdgpu_hal_kernel_library_verify_kernel_abi(
     iree_arena_allocator_t* table_arena) {
   *out_failed = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_low(
-      module, plan->low_function_op, plan->target.descriptor_set, max_errors,
-      loom_target_entry_emitter(diagnostic_emitter), &plan->abi_verify,
-      table_arena));
+      module, plan->low_function_op, plan->target.descriptor_set,
+      loom_amdgpu_target_processor_properties_from_resolved_target(
+          &plan->target),
+      max_errors, loom_target_entry_emitter(diagnostic_emitter),
+      &plan->abi_verify, table_arena));
   *out_failed = plan->abi_verify.error_count != 0;
   return iree_ok_status();
 }

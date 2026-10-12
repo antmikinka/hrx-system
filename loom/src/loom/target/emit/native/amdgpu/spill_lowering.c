@@ -153,7 +153,12 @@ loom_amdgpu_spill_lowering_scratch_descriptor_ref(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_descriptor_ref_t descriptor_ref) {
   const loom_low_descriptor_t* descriptor =
-      loom_amdgpu_spill_lowering_descriptor_ref(descriptor_set, descriptor_ref);
+      loom_amdgpu_descriptor_ref_descriptor(descriptor_set, descriptor_ref);
+  // Some scratch ISAs require an address register even for a constant offset.
+  // Their generated tables omit the offset-only family.
+  if (descriptor == NULL) {
+    return (loom_amdgpu_spill_descriptor_t){0};
+  }
 
   const loom_amdgpu_descriptor_immediate_slots_t immediate_slots =
       loom_amdgpu_descriptor_immediate_slots(descriptor_set, descriptor);
@@ -716,7 +721,8 @@ static iree_status_t loom_amdgpu_spill_lowering_store_chunk(
   loom_value_id_t operands[2] = {value, LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 1;
   int64_t offset = access->segment_offset;
-  if (!loom_amdgpu_spill_lowering_offset_fits_immediate(
+  if (spill_descriptor.descriptor == NULL ||
+      !loom_amdgpu_spill_lowering_offset_fits_immediate(
           spill_descriptor.offset_immediate, offset)) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_build_storage_address(
         context, rewriter, storage, access, value_type, location,
@@ -758,7 +764,8 @@ static iree_status_t loom_amdgpu_spill_lowering_load_chunk(
   loom_value_id_t operands[1] = {LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 0;
   int64_t offset = access->segment_offset;
-  if (!loom_amdgpu_spill_lowering_offset_fits_immediate(
+  if (spill_descriptor.descriptor == NULL ||
+      !loom_amdgpu_spill_lowering_offset_fits_immediate(
           spill_descriptor.offset_immediate, offset)) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_build_storage_address(
         context, rewriter, storage, access, result_type, location,

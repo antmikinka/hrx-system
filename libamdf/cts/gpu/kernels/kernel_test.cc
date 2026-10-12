@@ -44,6 +44,14 @@ namespace {
 
 using kernels::testing::CheckArgumentLayout;
 
+void CheckKernargAndWorkgroupInputs(const kernels::Kernel& kernel) {
+  // The caller supplies the kernarg pointer in two user SGPRs. The compiler may
+  // reserve padding before the hardware-populated workgroup X input.
+  constexpr uint32_t kUserSgprMask = 0x3eu;
+  EXPECT_GE((kernel.program.resource2 & kUserSgprMask) >> 1, 2u);
+  EXPECT_EQ(kernel.program.resource2 & (0x1fffu & ~kUserSgprMask), 0x80u);
+}
+
 TEST(KernelTest, DeviceSdmaProductsPreserveTheCallerContract) {
   using Arguments = kernels::device_sdma::Arguments;
   constexpr std::array<uint32_t, 16> kOffsets = {
@@ -282,7 +290,7 @@ TEST(KernelTest, TransformProductsPreserveTheCallerContract) {
       EXPECT_EQ(kernel.program.code_properties,
                 kernel.wavefront_size == 32 ? 0x408u : 8u);
       EXPECT_EQ(kernel.program.argument_preload, 0u);
-      EXPECT_EQ(kernel.program.resource2 & 0x1fffu, 0x84u);
+      CheckKernargAndWorkgroupInputs(kernel);
     }
   }
 }
@@ -446,7 +454,7 @@ TEST(KernelTest, EveryLdsProductPreservesTheCallerContract) {
     EXPECT_EQ(kernel.program.code_properties,
               kernel.wavefront_size == 32 ? 0x408u : 8u);
     EXPECT_EQ(kernel.program.argument_preload, 0u);
-    EXPECT_EQ(kernel.program.resource2 & 0x1fffu, 0x84u);
+    CheckKernargAndWorkgroupInputs(kernel);
     EXPECT_EQ(kernel.entry_byte_offset % 256, 0u);
     EXPECT_LT(kernel.entry_byte_offset, kernel.executable.byte_length);
     EXPECT_GE(kernel.text_byte_length, kernel.entry_byte_length);

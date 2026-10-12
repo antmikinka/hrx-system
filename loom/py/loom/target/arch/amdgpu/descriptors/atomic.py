@@ -723,7 +723,7 @@ _FLAT_ATOMIC_GFX12_ROWS = (
     _atomic_row("max_f32", "FLAT_ATOMIC_MAX_NUM_F32", "maxnum.f32", "FMT_NUM_F32"),
 )
 
-_FLAT_ATOMIC_GFX950_ROWS = (
+_FLAT_ATOMIC_CDNA32_ROWS = (
     _atomic_row(
         "add_u32",
         "FLAT_ATOMIC_ADD",
@@ -795,6 +795,16 @@ _FLAT_ATOMIC_GFX950_ROWS = (
         mnemonic_suffix="swap",
         has_no_return_form=False,
     ),
+)
+
+_FLAT_ATOMIC_CDNA2_ROWS = (
+    *_FLAT_ATOMIC_CDNA32_ROWS,
+    *_integer64_atomic_rows("FLAT", cdna_mnemonics=True),
+    *_float64_atomic_rows("FLAT"),
+)
+
+_FLAT_ATOMIC_GFX950_ROWS = (
+    *_FLAT_ATOMIC_CDNA32_ROWS,
     _atomic_row("add_f32", "FLAT_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32"),
     *_integer64_atomic_rows("FLAT", cdna_mnemonics=True),
     *_float64_atomic_rows("FLAT"),
@@ -1492,6 +1502,7 @@ __all__ = (
     "_BUFFER_ATOMIC_GFX12_ROWS",
     "_FLAT_ATOMIC_GFX11_ROWS",
     "_FLAT_ATOMIC_GFX12_ROWS",
+    "_FLAT_ATOMIC_CDNA2_ROWS",
     "_FLAT_ATOMIC_GFX950_ROWS",
     "_GLOBAL_ATOMIC_GFX11_ROWS",
     "_GLOBAL_ATOMIC_GFX12_ROWS",

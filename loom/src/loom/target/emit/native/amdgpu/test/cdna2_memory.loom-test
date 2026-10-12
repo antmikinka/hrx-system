@@ -1,0 +1,73 @@
+// CDNA2 selects global-to-LDS through the LDS bit on ordinary global loads.
+// Both address forms preserve their offset and cache modifiers.
+// RUN: emit amdgpu-assembly @global_to_lds strategy=source waits=none
+amdgpu.target<gfx90a> @target
+
+low.func.def target<amdgpu.cdna2.core>(@target) @global_to_lds(%address: reg<amdgpu.vgpr x2>, %offset: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) asm {
+  global_load_lds_ubyte_vaddr %address, %m0 {offset = 4, glc = 1}
+  global_load_lds_sbyte_vaddr %address, %m0 {offset = 8, slc = 1}
+  global_load_lds_ushort_vaddr %address, %m0 {offset = 12}
+  global_load_lds_sshort_vaddr %address, %m0 {offset = 16}
+  global_load_lds_dword_vaddr %address, %m0 {offset = 20}
+  global_load_lds_ubyte_saddr %offset, %base, %m0 {offset = 24, glc = 1}
+  global_load_lds_sbyte_saddr %offset, %base, %m0 {offset = 28, slc = 1}
+  global_load_lds_ushort_saddr %offset, %base, %m0 {offset = 32}
+  global_load_lds_sshort_saddr %offset, %base, %m0 {offset = 36}
+  global_load_lds_dword_saddr %offset, %base, %m0 {offset = 40}
+  return
+}
+
+// ----
+  global_load_ubyte v[0:1], off offset:4 glc lds
+  global_load_sbyte v[0:1], off offset:8 slc lds
+  global_load_ushort v[0:1], off offset:12 lds
+  global_load_sshort v[0:1], off offset:16 lds
+  global_load_dword v[0:1], off offset:20 lds
+  global_load_ubyte v2, s[0:1] offset:24 glc lds
+  global_load_sbyte v2, s[0:1] offset:28 slc lds
+  global_load_ushort v2, s[0:1] offset:32 lds
+  global_load_sshort v2, s[0:1] offset:36 lds
+  global_load_dword v2, s[0:1] offset:40 lds
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native-words @global_to_lds strategy=source waits=none
+amdgpu.target<gfx90a> @target
+
+low.func.def target<amdgpu.cdna2.core>(@target) @global_to_lds(%address: reg<amdgpu.vgpr x2>, %offset: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) asm {
+  global_load_lds_ubyte_vaddr %address, %m0 {offset = 4, glc = 1}
+  global_load_lds_sbyte_vaddr %address, %m0 {offset = 8, slc = 1}
+  global_load_lds_ushort_vaddr %address, %m0 {offset = 12}
+  global_load_lds_sshort_vaddr %address, %m0 {offset = 16}
+  global_load_lds_dword_vaddr %address, %m0 {offset = 20}
+  global_load_lds_ubyte_saddr %offset, %base, %m0 {offset = 24, glc = 1}
+  global_load_lds_sbyte_saddr %offset, %base, %m0 {offset = 28, slc = 1}
+  global_load_lds_ushort_saddr %offset, %base, %m0 {offset = 32}
+  global_load_lds_sshort_saddr %offset, %base, %m0 {offset = 36}
+  global_load_lds_dword_saddr %offset, %base, %m0 {offset = 40}
+  return
+}
+
+// ----
+0xDC41A004
+0x007F0000
+0xDC46A008
+0x007F0000
+0xDC48A00C
+0x007F0000
+0xDC4CA010
+0x007F0000
+0xDC50A014
+0x007F0000
+0xDC41A018
+0x00000002
+0xDC46A01C
+0x00000002
+0xDC48A020
+0x00000002
+0xDC4CA024
+0x00000002
+0xDC50A028
+0x00000002
+0xBF810000

@@ -286,8 +286,8 @@ bool loom_amdgpu_system_memory_acquire_ordering_available(
     return false;
   }
   for (uint8_t i = 0; i < rule->invalidate_count; ++i) {
-    if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
-                                            rule->invalidates[i])) {
+    if (!loom_amdgpu_descriptor_set_has_ref(
+            descriptor_set, rule->invalidates[i].descriptor_ref)) {
       return false;
     }
   }
@@ -488,8 +488,12 @@ iree_status_t loom_amdgpu_system_memory_build_acquire_ordering_scoped(
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_load_wait(
       builder, descriptor_set, location));
   for (uint8_t i = 0; i < rule->invalidate_count; ++i) {
+    if (scope < rule->invalidates[i].minimum_scope) {
+      continue;
+    }
     IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_cache_packet(
-        builder, descriptor_set, rule, rule->invalidates[i], scope, location));
+        builder, descriptor_set, rule, rule->invalidates[i].descriptor_ref,
+        scope, location));
   }
   if (rule->invalidate_wait_mask) {
     return loom_amdgpu_system_memory_build_wait_counter_mask(

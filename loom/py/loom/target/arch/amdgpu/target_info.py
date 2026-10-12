@@ -222,6 +222,7 @@ AMDGPU_BUFFER_RESOURCE_RECORD_ENCODINGS = (
 
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE = "none"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX11_GLC_SLC_DLC = "gfx11_glc_slc_dlc"
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_CDNA2_GLC_SLC = "cdna2_glc_slc"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH = "gfx12_nv_scope_th"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = "gfx950_nt_sc0_sc1"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODINGS = (
@@ -229,6 +230,7 @@ AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODINGS = (
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX11_GLC_SLC_DLC,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_CDNA2_GLC_SLC,
 )
 
 AMDGPU_MEMORY_ORDERING_MODEL_NONE = "none"
@@ -236,12 +238,14 @@ AMDGPU_MEMORY_ORDERING_MODEL_GFX11 = "gfx11"
 AMDGPU_MEMORY_ORDERING_MODEL_GFX12 = "gfx12"
 AMDGPU_MEMORY_ORDERING_MODEL_GFX125 = "gfx125"
 AMDGPU_MEMORY_ORDERING_MODEL_CDNA = "cdna"
+AMDGPU_MEMORY_ORDERING_MODEL_CDNA2 = "cdna2"
 AMDGPU_MEMORY_ORDERING_MODELS = (
     AMDGPU_MEMORY_ORDERING_MODEL_NONE,
     AMDGPU_MEMORY_ORDERING_MODEL_GFX11,
     AMDGPU_MEMORY_ORDERING_MODEL_GFX12,
     AMDGPU_MEMORY_ORDERING_MODEL_GFX125,
     AMDGPU_MEMORY_ORDERING_MODEL_CDNA,
+    AMDGPU_MEMORY_ORDERING_MODEL_CDNA2,
 )
 
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_SCOPE = "scope"
@@ -363,12 +367,14 @@ AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING = 1 << 1
 AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET = 1 << 2
 AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE = 1 << 3
 AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID = 1 << 4
+AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_USER_FLAT_SCRATCH_INIT = 1 << 5
 AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS = (
     AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH
     | AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING
     | AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET
     | AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE
     | AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID
+    | AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_USER_FLAT_SCRATCH_INIT
 )
 AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAGS_CDNA_GFX9 = (
     AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH
@@ -501,6 +507,13 @@ class AmdgpuDescriptorSetInfo:
         AmdgpuDescriptorSetVectorMemoryInfo()
     )
 
+
+AMDGPU_DESCRIPTOR_SET_ISA_CDNA2 = AmdgpuDescriptorSetIsaInfo(
+    isa_xml_key="cdna2",
+    isa_architecture_name="AMD CDNA 2",
+    isa_architecture_id=1,
+    sopp_opcodes=AMDGPU_SOPP_OPCODE_INFO_CDNA,
+)
 
 AMDGPU_DESCRIPTOR_SET_ISA_CDNA3 = AmdgpuDescriptorSetIsaInfo(
     isa_xml_key="cdna3",
@@ -796,6 +809,16 @@ AMDGPU_PROCESSOR_INSTRUCTION_INFO_NONE = AmdgpuProcessorInstructionInfo()
 AMDGPU_KERNEL_DESCRIPTOR_INFO_PACKED_WORKITEM_ID = AmdgpuProcessorKernelDescriptorInfo(
     flags=AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID,
 )
+AMDGPU_KERNEL_DESCRIPTOR_INFO_CDNA2 = AmdgpuProcessorKernelDescriptorInfo(
+    profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
+    flags=(
+        AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_USER_FLAT_SCRATCH_INIT
+        | AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET
+        | AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE
+        | AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID
+    ),
+    vgpr_granules=AmdgpuKernelDescriptorVgprGranules(wave32=8, wave64=8),
+)
 AMDGPU_KERNEL_DESCRIPTOR_INFO_CDNA_GFX9 = AmdgpuProcessorKernelDescriptorInfo(
     profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
     flags=AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAGS_CDNA_GFX9,
@@ -981,6 +1004,12 @@ AMDGPU_CACHE_TEMPORAL_KEYWORDS = tuple(case.keyword for case in CacheTemporal.ca
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_INFOS: tuple[
     AmdgpuVectorMemoryCachePolicyEncodingInfo, ...
 ] = (
+    AmdgpuVectorMemoryCachePolicyEncodingInfo(
+        encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_CDNA2_GLC_SLC,
+        selected_key="memory_cache_policy.cdna2_glc_slc",
+        cache_scopes=("device",),
+        cache_temporals=("regular",),
+    ),
     AmdgpuVectorMemoryCachePolicyEncodingInfo(
         encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX11_GLC_SLC_DLC,
         selected_key="memory_cache_policy.gfx11_glc_slc_dlc",
@@ -1308,6 +1337,20 @@ def gfx125x_processor_info(
 # for signaling NaNs, so that guarantee is absent.
 AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
     AmdgpuDescriptorSetInfo(
+        generator_target="cdna2",
+        key="amdgpu.cdna2.core",
+        isa_infos=(AMDGPU_DESCRIPTOR_SET_ISA_CDNA2,),
+        flags=(
+            AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING
+            | AMDGPU_DESCRIPTOR_SET_INFO_FLAG_STORE_DATA_WAIT_STATES
+        ),
+        buffer_resource=AMDGPU_BUFFER_RESOURCE_INFO_BASE48_LEGACY,
+        vector_memory=AmdgpuDescriptorSetVectorMemoryInfo(
+            cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_CDNA2_GLC_SLC,
+            ordering_model=AMDGPU_MEMORY_ORDERING_MODEL_CDNA2,
+        ),
+    ),
+    AmdgpuDescriptorSetInfo(
         generator_target="cdna3",
         key="amdgpu.cdna3.core",
         isa_infos=(AMDGPU_DESCRIPTOR_SET_ISA_CDNA3,),
@@ -1550,12 +1593,16 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     gfx9_10_processor_info(
         "gfx909", 0x031, elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4
     ),
-    gfx9_10_processor_info(
+    processor_info(
         "gfx90a",
         0x03F,
+        flags=AMDGPU_PROCESSOR_INFO_FLAG_HSACO_EMISSION,
+        descriptor_set_key="amdgpu.cdna2.core",
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A,
-        kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_PACKED_WORKITEM_ID,
+        kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_CDNA2,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES,
+        occupancy=AMDGPU_OCCUPANCY_CDNA3,
     ),
     gfx9_10_processor_info(
         "gfx90c", 0x032, elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4
@@ -1904,6 +1951,13 @@ AMDGPU_TARGET_INFOS: tuple[AmdgpuTargetInfo, ...] = (
             ),
             kernel_metadata_extensions=((".gfx1250_revision", "A0"),),
         ),
+    ),
+    AmdgpuTargetInfo(
+        target="gfx90a",
+        processor="gfx90a",
+        enum_value=25,
+        doc="CDNA 2 gfx90a target row.",
+        default_for_descriptor_set=True,
     ),
 )
 

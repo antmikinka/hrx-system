@@ -351,17 +351,23 @@ def _floating_arithmetic_support_overlays() -> tuple[AmdgpuDescriptorOverlay, ..
 
 def _cdna_core_overlays(
     *,
-    packed8_source_semantics: str,
-    global_load_lds_variants: tuple[tuple[str, str, str, int, int], ...],
-    buffer_load_lds_variants: tuple[
-        tuple[str, str, str, int, int, AmdgpuImplicitOperandOverlay], ...
-    ],
-    include_v_dot2_f32_bf16: bool,
-    include_v_cvt_pk_bf16_f32: bool,
-    include_v_cvt_scalef32_pk_packed8: bool,
-    include_ds_transpose_reads: bool,
+    isa_generation: int,
     matrix_overlays: tuple[AmdgpuDescriptorOverlay, ...],
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    cache_fields = (
+        _GFX950_VECTOR_CACHE_FIELDS if isa_generation >= 3 else (("GLC", 1), ("SLC", 1))
+    )
+    packed8_source_semantics = {2: None, 3: "fnuz", 4: "ocp"}[isa_generation]
+    global_load_lds_variants = (
+        _GLOBAL_LOAD_LDS_GFX950_VARIANTS
+        if isa_generation >= 4
+        else _GLOBAL_LOAD_LDS_CDNA3_VARIANTS
+    )
+    buffer_load_lds_variants = (
+        _BUFFER_LOAD_LDS_GFX950_VARIANTS
+        if isa_generation >= 4
+        else _BUFFER_LOAD_LDS_CDNA3_VARIANTS
+    )
     return (
         _s_add_u32_overlay(),
         _s_add_co_u32_overlay(),
@@ -441,8 +447,11 @@ def _cdna_core_overlays(
         _v_med3_num_f32_overlay(),
         *_v_binary_f32_dpp_legacy_overlays(),
         _v_fma_f32_overlay(),
-        _v_fmaak_f32_overlay(),
-        _v_fmamk_f32_product_flushing_overlay(),
+        *(
+            (_v_fmaak_f32_overlay(), _v_fmamk_f32_product_flushing_overlay())
+            if isa_generation >= 3
+            else ()
+        ),
         _v_fmac_f32_overlay(),
         *_cdna_scalar_fma_overlays(),
         _v_pk_fmac_f16_overlay(),
@@ -474,18 +483,21 @@ def _cdna_core_overlays(
         _v_cvt_f32_f16_overlay(),
         _v_cvt_f16_f32_overlay(),
         _v_pack_b32_f16_overlay(),
-        *_v_cvt_f32_packed8_overlays(packed8_source_semantics),
-        *_v_cvt_pk_packed8_from_f32_overlays(
-            packed8_source_semantics,
-            op_sel_field="OP_SEL",
-        ),
         *(
-            _v_cvt_scalef32_pk_packed8_overlays()
-            if include_v_cvt_scalef32_pk_packed8
+            _v_cvt_f32_packed8_overlays(packed8_source_semantics)
+            if packed8_source_semantics
             else ()
         ),
+        *(
+            _v_cvt_pk_packed8_from_f32_overlays(
+                packed8_source_semantics, op_sel_field="OP_SEL"
+            )
+            if packed8_source_semantics
+            else ()
+        ),
+        *(_v_cvt_scalef32_pk_packed8_overlays() if (isa_generation >= 4) else ()),
         _v_cvt_pk_u16_u32_overlay(),
-        *((_v_cvt_pk_bf16_f32_overlay(),) if include_v_cvt_pk_bf16_f32 else ()),
+        *((_v_cvt_pk_bf16_f32_overlay(),) if (isa_generation >= 4) else ()),
         _v_cvt_f64_f32_overlay(),
         _v_cvt_f32_f64_overlay(),
         _v_cvt_f32_i32_overlay(),
@@ -535,17 +547,17 @@ def _cdna_core_overlays(
         _buffer_load_dword_overlay(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_load_dword_off_zero_overlay(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_load_dword_vaddr_offset_overlay(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_load_64_overlay(
             descriptor_key="amdgpu.buffer_load_dwordx2",
@@ -553,7 +565,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_load_dwordx2",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
             off_zero_descriptor_key="amdgpu.buffer_load_dwordx2_off_zero",
             vaddr_offset_descriptor_key="amdgpu.buffer_load_dwordx2_vaddr_offset",
         ),
@@ -563,7 +575,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_load_dwordx2",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_load_64_vaddr_offset_overlay(
             descriptor_key="amdgpu.buffer_load_dwordx2_vaddr_offset",
@@ -571,7 +583,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_load_dwordx2",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_load_96_overlay(
             descriptor_key="amdgpu.buffer_load_dwordx3",
@@ -579,7 +591,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_load_dwordx3",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
             off_zero_descriptor_key="amdgpu.buffer_load_dwordx3_off_zero",
             vaddr_offset_descriptor_key="amdgpu.buffer_load_dwordx3_vaddr_offset",
         ),
@@ -589,7 +601,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_load_dwordx3",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_load_96_vaddr_offset_overlay(
             descriptor_key="amdgpu.buffer_load_dwordx3_vaddr_offset",
@@ -597,7 +609,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_load_dwordx3",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_load_128_overlay(
             descriptor_key="amdgpu.buffer_load_dwordx4",
@@ -605,7 +617,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_load_dwordx4",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
             off_zero_descriptor_key="amdgpu.buffer_load_dwordx4_off_zero",
             vaddr_offset_descriptor_key="amdgpu.buffer_load_dwordx4_vaddr_offset",
         ),
@@ -615,7 +627,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_load_dwordx4",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_load_128_vaddr_offset_overlay(
             descriptor_key="amdgpu.buffer_load_dwordx4_vaddr_offset",
@@ -623,22 +635,22 @@ def _cdna_core_overlays(
             mnemonic="buffer_load_dwordx4",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_store_dword_overlay(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_store_dword_off_zero_overlay(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_store_dword_vaddr_offset_overlay(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_store_64_overlay(
             descriptor_key="amdgpu.buffer_store_dwordx2",
@@ -646,7 +658,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_store_dwordx2",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
             off_zero_descriptor_key="amdgpu.buffer_store_dwordx2_off_zero",
             vaddr_offset_descriptor_key="amdgpu.buffer_store_dwordx2_vaddr_offset",
         ),
@@ -656,7 +668,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_store_dwordx2",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_store_64_vaddr_offset_overlay(
             descriptor_key="amdgpu.buffer_store_dwordx2_vaddr_offset",
@@ -664,7 +676,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_store_dwordx2",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_store_96_overlay(
             descriptor_key="amdgpu.buffer_store_dwordx3",
@@ -672,7 +684,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_store_dwordx3",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
             off_zero_descriptor_key="amdgpu.buffer_store_dwordx3_off_zero",
             vaddr_offset_descriptor_key="amdgpu.buffer_store_dwordx3_vaddr_offset",
         ),
@@ -682,7 +694,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_store_dwordx3",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_store_96_vaddr_offset_overlay(
             descriptor_key="amdgpu.buffer_store_dwordx3_vaddr_offset",
@@ -690,7 +702,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_store_dwordx3",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_store_128_overlay(
             descriptor_key="amdgpu.buffer_store_dwordx4",
@@ -698,7 +710,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_store_dwordx4",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
             off_zero_descriptor_key="amdgpu.buffer_store_dwordx4_off_zero",
             vaddr_offset_descriptor_key="amdgpu.buffer_store_dwordx4_vaddr_offset",
         ),
@@ -708,7 +720,7 @@ def _cdna_core_overlays(
             mnemonic="buffer_store_dwordx4",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         _buffer_store_128_vaddr_offset_overlay(
             descriptor_key="amdgpu.buffer_store_dwordx4_vaddr_offset",
@@ -716,22 +728,22 @@ def _cdna_core_overlays(
             mnemonic="buffer_store_dwordx4",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_buffer_byte_memory_overlays(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_buffer_b16_memory_overlays(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_buffer_load_lds_overlays(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
             variants=buffer_load_lds_variants,
         ),
         *_global_memory_overlays(
@@ -746,7 +758,7 @@ def _cdna_core_overlays(
             saddr_off=_GLOBAL_GFX950_SADDR_OFF,
             address_units=2,
             xml_has_m0=True,
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_global_byte_memory_overlays(
             encoding_name="ENC_FLAT_GLBL",
@@ -759,7 +771,7 @@ def _cdna_core_overlays(
             address_units=2,
             xml_has_m0=True,
             load_mnemonic_suffixes=("ubyte", "sbyte"),
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_global_b16_memory_overlays(
             encoding_name="ENC_FLAT_GLBL",
@@ -772,7 +784,7 @@ def _cdna_core_overlays(
             address_units=2,
             xml_has_m0=True,
             load_mnemonic_suffixes=("ushort", "sshort"),
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_global_memory_overlays(
             instruction_suffixes=_CDNA_DWORD_MEMORY_INSTRUCTION_SUFFIXES,
@@ -787,7 +799,7 @@ def _cdna_core_overlays(
             address_units=1,
             descriptor_key_suffix="_saddr",
             xml_has_m0=True,
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_global_byte_memory_overlays(
             encoding_name="ENC_FLAT_GLBL",
@@ -801,7 +813,7 @@ def _cdna_core_overlays(
             descriptor_key_suffix="_saddr",
             xml_has_m0=True,
             load_mnemonic_suffixes=("ubyte", "sbyte"),
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_global_b16_memory_overlays(
             encoding_name="ENC_FLAT_GLBL",
@@ -815,11 +827,15 @@ def _cdna_core_overlays(
             descriptor_key_suffix="_saddr",
             xml_has_m0=True,
             load_mnemonic_suffixes=("ushort", "sshort"),
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_scratch_memory_overlays(
             instruction_suffixes=_CDNA_DWORD_MEMORY_INSTRUCTION_SUFFIXES,
-            mnemonic_suffixes=_BYTE_MEMORY_MNEMONIC_SUFFIXES,
+            mnemonic_suffixes=(
+                _BYTE_MEMORY_MNEMONIC_SUFFIXES
+                if isa_generation >= 3
+                else _CDNA_DWORD_MEMORY_MNEMONIC_SUFFIXES
+            ),
             encoding_name="ENC_FLAT_SCRATCH",
             address_field_name="ADDR",
             load_data_field_name="VDST",
@@ -831,15 +847,20 @@ def _cdna_core_overlays(
             fixed_saddr=_SCRATCH_CDNA_SADDR_OFF,
             implicit_flat_scratch=True,
             xml_has_m0=True,
+            vector_enable_field="SVE" if isa_generation >= 3 else None,
             descriptor_key_suffix="_vaddr",
             narrow_byte_load_mnemonic_suffixes=("ubyte", "sbyte"),
             narrow_b16_load_mnemonic_suffixes=("ushort", "sshort"),
             narrow_store_mnemonic_suffixes=("byte", "short"),
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_scratch_memory_overlays(
             instruction_suffixes=_CDNA_DWORD_MEMORY_INSTRUCTION_SUFFIXES,
-            mnemonic_suffixes=_BYTE_MEMORY_MNEMONIC_SUFFIXES,
+            mnemonic_suffixes=(
+                _BYTE_MEMORY_MNEMONIC_SUFFIXES
+                if isa_generation >= 3
+                else _CDNA_DWORD_MEMORY_MNEMONIC_SUFFIXES
+            ),
             encoding_name="ENC_FLAT_SCRATCH",
             address_field_name="ADDR",
             load_data_field_name="VDST",
@@ -848,27 +869,30 @@ def _cdna_core_overlays(
             offset_bit_width=13,
             offset_signed=True,
             fixed_vaddr=0,
-            fixed_saddr=_SCRATCH_CDNA_SADDR_OFF,
+            fixed_saddr=_SCRATCH_CDNA_SADDR_OFF if isa_generation >= 3 else None,
             implicit_flat_scratch=True,
             xml_has_m0=True,
-            descriptor_key_suffix="_offset_only",
+            vector_enable_field="SVE" if isa_generation >= 3 else None,
+            descriptor_key_suffix="_offset_only" if isa_generation >= 3 else "_saddr",
             narrow_byte_load_mnemonic_suffixes=("ubyte", "sbyte"),
             narrow_b16_load_mnemonic_suffixes=("ushort", "sshort"),
             narrow_store_mnemonic_suffixes=("byte", "short"),
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_global_load_lds_overlays(
             address_units=2,
             saddr_off=_GLOBAL_GFX950_SADDR_OFF,
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
             variants=global_load_lds_variants,
+            lds_field="LDS" if isa_generation == 2 else None,
         ),
         *_global_load_lds_overlays(
             address_units=1,
             saddr_off=None,
             descriptor_key_suffix="_saddr",
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
             variants=global_load_lds_variants,
+            lds_field="LDS" if isa_generation == 2 else None,
         ),
         *_global_atomic_overlays(
             rows=_GLOBAL_ATOMIC_GFX940_ROWS,
@@ -878,10 +902,10 @@ def _cdna_core_overlays(
             data_field_name="DATA",
             offset_field_name="OFFSET",
             offset_bit_width=13,
-            return_field_name="SC0",
+            return_field_name="SC0" if isa_generation >= 3 else "GLC",
             return_field_value=1,
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
-            cache_immediate_field_names=("SC1",),
+            cache_fields=cache_fields,
+            cache_immediate_field_names=("SC1",) if isa_generation >= 3 else ("SLC",),
             saddr_off=None,
             address_units=1,
             descriptor_key_suffix="_saddr",
@@ -902,10 +926,12 @@ def _cdna_core_overlays(
             xml_has_m0=True,
             allow_accumulator_results=True,
             allow_accumulator_operands=True,
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            cache_fields=cache_fields,
         ),
         *_flat_atomic_overlays(
-            rows=_FLAT_ATOMIC_GFX950_ROWS,
+            rows=_FLAT_ATOMIC_GFX950_ROWS
+            if isa_generation >= 3
+            else _FLAT_ATOMIC_CDNA2_ROWS,
             cmpswap_instruction_name="FLAT_ATOMIC_CMPSWAP",
             cmpswap_mnemonic_suffix="x2",
             encoding_name="ENC_FLAT",
@@ -914,10 +940,10 @@ def _cdna_core_overlays(
             offset_field_name="OFFSET",
             offset_bit_width=12,
             offset_signed=False,
-            return_field_name="SC0",
+            return_field_name="SC0" if isa_generation >= 3 else "GLC",
             return_field_value=1,
-            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
-            cache_immediate_field_names=("SC1",),
+            cache_fields=cache_fields,
+            cache_immediate_field_names=("SC1",) if isa_generation >= 3 else ("SLC",),
             implicit_flat_scratch=True,
             xml_has_m0=True,
             allow_accumulator_operands=True,
@@ -925,25 +951,27 @@ def _cdna_core_overlays(
         *_ds_memory_overlays(
             cmpxchg_expected_field="DATA0",
             cmpxchg_replacement_field="DATA1",
-            float_atomic_add_types=("f32", "f64", "pk2.f16", "pk2.bf16"),
+            float_atomic_add_types=("f32", "f64", "pk2.f16", "pk2.bf16")
+            if isa_generation >= 3
+            else ("f32", "f64"),
             # SRAM ECC can make D16 loads overwrite the complementary half.
             # Paired loads require the preserving descriptors exposed on RDNA.
             include_u16_d16_loads=False,
         ),
         *_ds_crosslane_overlays(),
         _v_dot2_f32_f16_overlay(),
-        *((_v_dot2_f32_bf16_overlay(),) if include_v_dot2_f32_bf16 else ()),
+        *((_v_dot2_f32_bf16_overlay(),) if (isa_generation >= 4) else ()),
         _v_dot4_i32_i8_overlay(signedness_modifiers=False),
         _v_dot4_u32_u8_overlay(),
         _v_dot8_i32_i4_overlay(signedness_modifiers=False),
         _v_dot8_u32_u4_overlay(),
-        *(_gfx950_ds_transpose_read_overlays() if include_ds_transpose_reads else ()),
+        *(_gfx950_ds_transpose_read_overlays() if (isa_generation >= 4) else ()),
         *matrix_overlays,
         _s_barrier_overlay(),
         _s_sendmsg_overlay(),
         _s_sethalt_overlay(),
         _s_trap_overlay(),
-        *_gfx950_cache_control_overlays(),
+        *_cdna_cache_control_overlays(isa_generation=isa_generation),
         _s_waitcnt_overlay(
             effects=(
                 _VMEM_LOAD_WAIT_EFFECT,
@@ -957,15 +985,25 @@ def _cdna_core_overlays(
 
 
 @cache
+def _gfx90a_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return _cdna_core_overlays(
+        isa_generation=2,
+        matrix_overlays=tuple(overlay for overlay, _ in _cdna2_matrix_rows()),
+    )
+
+
+def _gfx90a_core_overlay_descriptors(
+    spec: AmdgpuIsaFactSource,
+) -> tuple[Descriptor, ...]:
+    return _with_execution_mask_state_reads(
+        materialize_amdgpu_descriptor_overlays(spec, _gfx90a_core_overlays())
+    )
+
+
+@cache
 def _gfx940_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return _cdna_core_overlays(
-        packed8_source_semantics="fnuz",
-        global_load_lds_variants=_GLOBAL_LOAD_LDS_CDNA3_VARIANTS,
-        buffer_load_lds_variants=_BUFFER_LOAD_LDS_CDNA3_VARIANTS,
-        include_v_dot2_f32_bf16=False,
-        include_v_cvt_pk_bf16_f32=False,
-        include_v_cvt_scalef32_pk_packed8=False,
-        include_ds_transpose_reads=False,
+        isa_generation=3,
         matrix_overlays=(*_cdna3_mfma_overlays(), *_cdna3_smfmac_overlays()),
     )
 
@@ -974,13 +1012,7 @@ def _gfx940_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         *_cdna_core_overlays(
-            packed8_source_semantics="ocp",
-            global_load_lds_variants=_GLOBAL_LOAD_LDS_GFX950_VARIANTS,
-            buffer_load_lds_variants=_BUFFER_LOAD_LDS_GFX950_VARIANTS,
-            include_v_dot2_f32_bf16=True,
-            include_v_cvt_pk_bf16_f32=True,
-            include_v_cvt_scalef32_pk_packed8=True,
-            include_ds_transpose_reads=True,
+            isa_generation=4,
             matrix_overlays=(*_cdna4_mfma_overlays(), *_cdna4_smfmac_overlays()),
         ),
         *_gfx950_permlane_swap_overlays(),
@@ -2856,6 +2888,7 @@ def _gfx12_5_generic_core_overlay_descriptors(
 
 def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
     return (
+        _AMDGPU_CDNA2_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_GFX9_4_GENERIC_CORE_DESCRIPTOR_SET_BASE,
@@ -2879,6 +2912,7 @@ def _amdgpu_descriptor_ref_key_set() -> set[str]:
     for descriptor_set in _amdgpu_core_descriptor_set_bases():
         keys.update(descriptor.key for descriptor in descriptor_set.descriptors)
     for overlays in (
+        _gfx90a_core_overlays(),
         _gfx940_core_overlays(),
         _gfx950_core_overlays(),
         _gfx11_core_overlays(),
@@ -2892,6 +2926,9 @@ def _amdgpu_descriptor_ref_key_set() -> set[str]:
 
 
 __all__ = (
+    "_AMDGPU_CDNA2_CORE_DESCRIPTOR_SET_BASE",
+    "_gfx90a_core_overlays",
+    "_gfx90a_core_overlay_descriptors",
     "_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE",
     "_AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE",
     "_AMDGPU_GFX9_4_GENERIC_CORE_DESCRIPTOR_SET_BASE",

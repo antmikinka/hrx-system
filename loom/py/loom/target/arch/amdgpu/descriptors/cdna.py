@@ -20,6 +20,7 @@ from loom.target.arch.amdgpu.matrix_formats import (
 from loom.target.low_descriptors import DescriptorSet
 
 from .common import *
+from .matrix import _cdna2_matrix_rows
 
 
 def _with_matrix_timings(
@@ -229,6 +230,17 @@ _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE = _with_matrix_timings(
     _AMDGPU_GFX942_MATRIX_TIMINGS,
 )
 
+_AMDGPU_CDNA2_CORE_DESCRIPTOR_SET_BASE = _with_matrix_timings(
+    _amdgpu_core_descriptor_set(
+        key="amdgpu.cdna2.core",
+        reg_classes=_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE.reg_classes,
+        register_parts=_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE.register_parts,
+        resources=_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE.resources,
+        schedule_classes=_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE.schedule_classes,
+    ),
+    {overlay.descriptor_key: timing for overlay, timing in _cdna2_matrix_rows()},
+)
+
 _AMDGPU_GFX9_4_GENERIC_CORE_DESCRIPTOR_SET_BASE = (
     _amdgpu_core_descriptor_set_intersection(
         key="amdgpu.gfx9_4.generic.core",
@@ -245,6 +257,7 @@ _AMDGPU_GFX9_4_GENERIC_CORE_DESCRIPTOR_SET_BASE = _with_matrix_timings(
 
 
 __all__ = (
+    "_AMDGPU_CDNA2_CORE_DESCRIPTOR_SET_BASE",
     "_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE",
     "_AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE",
     "_AMDGPU_GFX9_4_GENERIC_CORE_DESCRIPTOR_SET_BASE",

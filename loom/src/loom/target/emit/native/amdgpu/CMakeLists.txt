@@ -159,6 +159,8 @@ loom_check_test_suite(
     "test/atomic_float64.loom-test"
     "test/atomic_i64.loom-test"
     "test/cache_completion.loom-test"
+    "test/cdna2_entry.loom-test"
+    "test/cdna2_memory.loom-test"
     "test/compile_time_insertions.loom-test"
     "test/delay_alu.loom-test"
     "test/delay_layout.loom-test"
@@ -396,6 +398,7 @@ loom_cc_benchmark(
     loom::codegen::low::verify
     loom::ir
     loom::ops::low
+    loom::target::arch::amdgpu::facts
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::planning::address_state
     loom::target::arch::amdgpu::planning::descriptor_semantics
@@ -511,6 +514,7 @@ loom_cc_library(
     ::text_fixup
     iree::base
     iree::base::internal::arena
+    loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::target_info_defs
   PUBLIC
 )
@@ -858,6 +862,7 @@ loom_cc_test(
     loom::ir
     loom::ops::low
     loom::target::arch::amdgpu::amdhsa_target_id
+    loom::target::arch::amdgpu::facts
     loom::target::arch::amdgpu::hal::binding_materialization
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::planning::storage_lease

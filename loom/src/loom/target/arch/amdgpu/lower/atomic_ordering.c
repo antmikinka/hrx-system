@@ -212,15 +212,18 @@ static bool loom_amdgpu_atomic_select_global_acquire_cache_controls(
     const loom_amdgpu_memory_coherence_rule_t* rule, loom_cache_scope_t scope,
     loom_amdgpu_atomic_ordering_selection_t* ordering) {
   for (iree_host_size_t i = 0; i < rule->invalidate_count; ++i) {
-    if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
-                                            rule->invalidates[i])) {
+    if (scope < rule->invalidates[i].minimum_scope) {
+      continue;
+    }
+    if (!loom_amdgpu_descriptor_set_has_ref(
+            descriptor_set, rule->invalidates[i].descriptor_ref)) {
       return false;
     }
-    ordering->post_atomic_visibility_packets[i] =
-        loom_amdgpu_atomic_select_cache_packet(rule, rule->invalidates[i],
-                                               scope);
+    ordering->post_atomic_visibility_packets
+        [ordering->post_atomic_visibility_packet_count++] =
+        loom_amdgpu_atomic_select_cache_packet(
+            rule, rule->invalidates[i].descriptor_ref, scope);
   }
-  ordering->post_atomic_visibility_packet_count = rule->invalidate_count;
   if (rule->invalidate_wait_mask != 0) {
     return loom_amdgpu_atomic_append_wait_counter_mask(
         descriptor_set, rule->invalidate_wait_mask,

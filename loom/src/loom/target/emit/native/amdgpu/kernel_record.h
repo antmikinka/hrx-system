@@ -20,6 +20,7 @@
 #include "loom/target/arch/amdgpu/target_identity.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/descriptor.h"
+#include "loom/target/emit/native/amdgpu/kernel_entry.h"
 #include "loom/target/emit/native/amdgpu/metadata.h"
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 
@@ -42,6 +43,8 @@ typedef struct loom_amdgpu_kernel_record_t {
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout;
   // Function-local storage layout shared by metadata and instruction emission.
   loom_amdgpu_storage_layout_t storage_layout;
+  // Final entry instructions shared by text, binary, fixups, and metadata.
+  const loom_amdgpu_kernel_entry_envelope_t* entry_envelope;
   // Metadata row shared by assembly notes and direct HSACO notes.
   loom_amdgpu_metadata_kernel_t metadata;
   // Descriptor flags not represented in the metadata row.

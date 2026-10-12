@@ -578,16 +578,40 @@ def _gfx12_prefetch_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     )
 
 
-def _gfx950_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+def _cdna_cache_control_overlays(
+    *, isa_generation: int
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
-        _cache_control_overlay(
-            descriptor_key="amdgpu.buffer_inv",
-            instruction_name="BUFFER_INV",
-            completion_counter=_COUNTER_VMEM_LOAD,
-            mnemonic="buffer_inv",
-            encoding_name="ENC_MUBUF",
-            semantic_tag="memory.cache.invalidate.buffer",
-            cache_fields=(("SC0", 1), ("SC1", 1)),
+        *(
+            (
+                _cache_control_overlay(
+                    descriptor_key=f"amdgpu.{mnemonic}",
+                    instruction_name=mnemonic.upper(),
+                    completion_counter=_COUNTER_VMEM_LOAD,
+                    mnemonic=mnemonic,
+                    encoding_name="ENC_MUBUF",
+                    semantic_tag=semantic_tag,
+                )
+                for mnemonic, semantic_tag in (
+                    ("buffer_invl2", "memory.cache.invalidate.buffer.l2"),
+                    (
+                        "buffer_wbinvl1_vol",
+                        "memory.cache.invalidate.buffer.l1.volatile",
+                    ),
+                )
+            )
+            if isa_generation == 2
+            else (
+                _cache_control_overlay(
+                    descriptor_key="amdgpu.buffer_inv",
+                    instruction_name="BUFFER_INV",
+                    completion_counter=_COUNTER_VMEM_LOAD,
+                    mnemonic="buffer_inv",
+                    encoding_name="ENC_MUBUF",
+                    semantic_tag="memory.cache.invalidate.buffer",
+                    cache_fields=(("SC0", 1), ("SC1", 1)),
+                ),
+            )
         ),
         _cache_control_overlay(
             descriptor_key="amdgpu.buffer_wbl2",
@@ -596,7 +620,7 @@ def _gfx950_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="buffer_wbl2",
             encoding_name="ENC_MUBUF",
             semantic_tag="memory.cache.writeback.buffer.l2",
-            cache_fields=(("SC0", 1), ("SC1", 1)),
+            cache_fields=(("SC0", 1), ("SC1", 1)) if isa_generation >= 3 else (),
         ),
         _cache_control_overlay(
             descriptor_key="amdgpu.s_dcache_inv",
@@ -750,7 +774,7 @@ __all__ = (
     "_gfx11_cache_control_overlays",
     "_gfx12_cache_control_overlays",
     "_gfx12_prefetch_overlays",
-    "_gfx950_cache_control_overlays",
+    "_cdna_cache_control_overlays",
     "_s_barrier_overlay",
     "_s_barrier_signal_all_overlay",
     "_s_barrier_wait_all_overlay",

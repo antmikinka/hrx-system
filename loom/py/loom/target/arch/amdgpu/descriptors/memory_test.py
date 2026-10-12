@@ -149,7 +149,9 @@ def test_narrow_stores_read_only_the_low_register_part(target: str) -> None:
             f"amdgpu.global_store_b{width}",
             f"amdgpu.global_store_b{width}_saddr",
             f"amdgpu.scratch_store_b{width}_vaddr",
-            f"amdgpu.scratch_store_b{width}_offset_only",
+            f"amdgpu.scratch_store_b{width}_saddr"
+            if target == "cdna2"
+            else f"amdgpu.scratch_store_b{width}_offset_only",
             "amdgpu.buffer_store_dword"
             if width == 32
             else f"amdgpu.buffer_store_b{width}",

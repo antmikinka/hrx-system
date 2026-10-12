@@ -391,6 +391,7 @@ static void loom_amdgpu_hal_kernel_abi_append_fixed_value(
 
 static void loom_amdgpu_hal_kernel_abi_build_fixed_values(
     const loom_value_id_t* live_in_values,
+    const loom_amdgpu_processor_properties_t* properties,
     loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
   static const loom_amdgpu_hal_kernel_abi_source_kind_t kUserSgprSourceKinds[] =
       {
@@ -414,6 +415,14 @@ static void loom_amdgpu_hal_kernel_abi_build_fixed_values(
         result->fixed_values, &result->fixed_value_count, value_id,
         user_sgpr_base, source_info->unit_count);
     user_sgpr_base += source_info->unit_count;
+  }
+  if (loom_amdgpu_processor_properties_kernel_descriptor_has_flags(
+          properties,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_USER_FLAT_SCRATCH_INIT)) {
+    result->flat_scratch_sgprs.init = user_sgpr_base;
+    // USER_SGPR_COUNT may exceed the enabled input count. Keep workgroup IDs
+    // fixed even when spill repair is the first producer of private storage.
+    user_sgpr_base += 2;
   }
   result->user_sgpr_count = user_sgpr_base;
 
@@ -452,6 +461,7 @@ static void loom_amdgpu_hal_kernel_abi_build_fixed_values(
         result->fixed_values, &result->fixed_value_count, value_id,
         location_base, source_info->unit_count);
   }
+  result->flat_scratch_sgprs.wavefront_offset = workgroup_id_sgpr;
 }
 
 static bool loom_amdgpu_hal_kernel_abi_can_emit(
@@ -1372,7 +1382,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_source_live_in_type(
 static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
     const loom_module_t* module, const loom_op_t* function_op,
     const loom_low_register_type_resolver_t* register_type_resolver,
-    uint32_t max_errors, iree_diagnostic_emitter_t emitter,
+    const loom_amdgpu_processor_properties_t* properties, uint32_t max_errors,
+    iree_diagnostic_emitter_t emitter,
     loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
   const loom_region_t* body = loom_low_function_const_body(function_op);
   if (body == NULL || body->block_count == 0) {
@@ -1496,14 +1507,16 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
         emitter, result));
   }
   if (result->error_count == 0) {
-    loom_amdgpu_hal_kernel_abi_build_fixed_values(live_in_values, result);
+    loom_amdgpu_hal_kernel_abi_build_fixed_values(live_in_values, properties,
+                                                  result);
   }
   return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
     const loom_module_t* module, const loom_op_t* function_op,
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t max_errors,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_processor_properties_t* properties, uint32_t max_errors,
     iree_diagnostic_emitter_t emitter,
     loom_amdgpu_hal_kernel_abi_verify_result_t* out_result,
     iree_arena_allocator_t* arena) {
@@ -1535,8 +1548,8 @@ iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_low_ops(
       module, function_op, descriptor_set, max_errors, emitter, out_result));
   return loom_amdgpu_hal_kernel_abi_verify_live_ins(
-      module, function_op, &register_type_resolver, max_errors, emitter,
-      out_result);
+      module, function_op, &register_type_resolver, properties, max_errors,
+      emitter, out_result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_attach_direct_args_from_low(

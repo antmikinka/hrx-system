@@ -6,6 +6,7 @@
 
 #include "loom/target/emit/native/amdgpu/kernel_entry.h"
 
+#include <stdio.h>
 #include <string.h>
 
 // This entry profile uses an unclaused VMEM followed by V_NOP. Replay mode
@@ -43,18 +44,66 @@ static const loom_amdgpu_kernel_entry_envelope_t
 static const loom_amdgpu_kernel_entry_envelope_t
     loom_amdgpu_empty_entry_envelope = {0};
 
-const loom_amdgpu_kernel_entry_envelope_t*
-loom_amdgpu_kernel_entry_envelope_for_properties(
-    const loom_amdgpu_processor_properties_t* properties) {
+iree_status_t loom_amdgpu_kernel_entry_envelope_build(
+    const loom_amdgpu_processor_properties_t* properties,
+    const loom_amdgpu_hal_kernel_abi_verify_result_t* abi,
+    uint32_t private_segment_size,
+    const loom_amdgpu_kernel_entry_envelope_t** out_envelope,
+    iree_arena_allocator_t* arena) {
+  *out_envelope = &loom_amdgpu_empty_entry_envelope;
+  if (private_segment_size != 0 &&
+      loom_amdgpu_processor_properties_kernel_descriptor_has_flags(
+          properties,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_USER_FLAT_SCRATCH_INIT)) {
+    struct entry_storage_t {
+      // Entry record retained by the kernel's native emission record.
+      loom_amdgpu_kernel_entry_envelope_t envelope;
+      // The two SOP2 instructions initializing the absolute scratch address.
+      uint8_t text[8];
+      // Assembly for the same instructions; launch SGPR indices fit two digits.
+      char assembly[96];
+    };
+    struct entry_storage_t* storage = NULL;
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate(arena, sizeof(*storage), (void**)&storage));
+    const uint32_t init = abi->flat_scratch_sgprs.init;
+    const uint32_t offset = abi->flat_scratch_sgprs.wavefront_offset;
+    // S_ADD_U32 flat_scratch_lo, init, offset; S_ADDC_U32
+    // flat_scratch_hi, init+1, 0. The launch registers die at this entry;
+    // allocation may reuse them in the scheduled body.
+    const uint8_t text[] = {(uint8_t)init,
+                            (uint8_t)offset,
+                            0x66,
+                            0x80,
+                            (uint8_t)(init + 1),
+                            0x80,
+                            0x67,
+                            0x82};
+    memcpy(storage->text, text, sizeof(text));
+    const int assembly_length =
+        snprintf(storage->assembly, sizeof(storage->assembly),
+                 "  s_add_u32 flat_scratch_lo, s%u, s%u\n"
+                 "  s_addc_u32 flat_scratch_hi, s%u, 0\n",
+                 init, offset, init + 1);
+    storage->envelope = (loom_amdgpu_kernel_entry_envelope_t){
+        .assembly = iree_make_string_view(storage->assembly, assembly_length),
+        .text = iree_make_const_byte_span(storage->text, sizeof(storage->text)),
+        .instruction_count = 2,
+        .minimum_sgpr_count = offset + 1,
+    };
+    *out_envelope = &storage->envelope;
+    return iree_ok_status();
+  }
   switch (properties->kernel_entry.profile) {
     case LOOM_AMDGPU_KERNEL_ENTRY_PROFILE_NONE:
-      return &loom_amdgpu_empty_entry_envelope;
+      break;
     case LOOM_AMDGPU_KERNEL_ENTRY_PROFILE_INITIAL_VMEM_REPLAY:
-      return &loom_amdgpu_initial_vmem_replay_entry_envelope;
+      *out_envelope = &loom_amdgpu_initial_vmem_replay_entry_envelope;
+      break;
     default:
       IREE_CHECK_UNREACHABLE("unknown AMDGPU kernel entry profile");
-      return &loom_amdgpu_empty_entry_envelope;
   }
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_kernel_entry_prepend_text(

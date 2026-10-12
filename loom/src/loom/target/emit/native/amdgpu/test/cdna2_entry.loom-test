@@ -1,0 +1,209 @@
+// RUN: emit amdgpu-kernel-assembly
+
+// Workgroup IDs retain their launch positions even when private storage is
+// absent. No flat-scratch initialization instructions or inputs are needed.
+amdgpu.target<gfx90a> @target
+
+low.kernel.def target<amdgpu.cdna2.core>(@target) workgroup_size(64, 1, 1) @no_private_storage() asm {
+  %group = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %value = v_add_u32 %group, %lane
+  return
+}
+
+// ----
+.text
+.amdgcn_target "amdgcn-amd-amdhsa--gfx90a"
+.amdhsa_code_object_version 6
+
+.protected no_private_storage
+.globl no_private_storage
+.p2align 8
+.type no_private_storage,@function
+no_private_storage:
+  v_add_u32 v0, s2, v0
+  s_endpgm
+.Lfunc_end0:
+.size no_private_storage, .Lfunc_end0-no_private_storage
+
+.rodata
+.p2align 6
+.amdhsa_kernel no_private_storage
+  .amdhsa_group_segment_fixed_size 0
+  .amdhsa_private_segment_fixed_size 0
+  .amdhsa_kernarg_size 0
+  .amdhsa_user_sgpr_count 2
+  .amdhsa_user_sgpr_private_segment_buffer 0
+  .amdhsa_user_sgpr_dispatch_ptr 0
+  .amdhsa_user_sgpr_queue_ptr 0
+  .amdhsa_user_sgpr_kernarg_segment_ptr 0
+  .amdhsa_user_sgpr_dispatch_id 0
+  .amdhsa_user_sgpr_flat_scratch_init 0
+  .amdhsa_user_sgpr_private_segment_size 0
+  .amdhsa_uses_dynamic_stack 0
+  .amdhsa_system_sgpr_private_segment_wavefront_offset 0
+  .amdhsa_system_sgpr_workgroup_id_x 1
+  .amdhsa_system_sgpr_workgroup_id_y 0
+  .amdhsa_system_sgpr_workgroup_id_z 0
+  .amdhsa_system_sgpr_workgroup_info 0
+  .amdhsa_system_vgpr_workitem_id 0
+  .amdhsa_next_free_vgpr 1
+  .amdhsa_next_free_sgpr 3
+  .amdhsa_accum_offset 4
+  .amdhsa_reserve_vcc 0
+  .amdhsa_reserve_flat_scratch 0
+  .amdhsa_float_round_mode_32 0
+  .amdhsa_float_round_mode_16_64 0
+  .amdhsa_float_denorm_mode_32 3
+  .amdhsa_float_denorm_mode_16_64 3
+  .amdhsa_dx10_clamp 1
+  .amdhsa_ieee_mode 1
+  .amdhsa_fp16_overflow 0
+  .amdhsa_tg_split 0
+  .amdhsa_exception_fp_ieee_invalid_op 0
+  .amdhsa_exception_fp_denorm_src 0
+  .amdhsa_exception_fp_ieee_div_zero 0
+  .amdhsa_exception_fp_ieee_overflow 0
+  .amdhsa_exception_fp_ieee_underflow 0
+  .amdhsa_exception_fp_ieee_inexact 0
+  .amdhsa_exception_int_div_zero 0
+.end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 1
+    - 2
+  amdhsa.target: 'amdgcn-amd-amdhsa--gfx90a'
+  amdhsa.kernels:
+    - .name: 'no_private_storage'
+      .symbol: 'no_private_storage.kd'
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 0
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .sgpr_count: 3
+      .vgpr_count: 1
+      .max_flat_workgroup_size: 64
+      .reqd_workgroup_size:
+        - 64
+        - 1
+        - 1
+      .args: []
+.end_amdgpu_metadata
+
+// ====
+
+// RUN: emit amdgpu-kernel-assembly
+
+// The scratch base follows all enabled user inputs, and the wave offset
+// follows the enabled workgroup IDs. Both die before body register allocation.
+amdgpu.target<gfx90a> @target
+
+low.kernel.def target<amdgpu.cdna2.core>(@target) workgroup_size(64, 1, 1) @private_storage() asm {
+  %arguments = live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>
+  %dispatch = live_in<amdgpu.dispatch_id> : reg<amdgpu.sgpr x2>
+  %group_x = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %group_y = live_in<amdgpu.workgroup_id.y> : reg<amdgpu.sgpr>
+  %group_z = live_in<amdgpu.workgroup_id.z> : reg<amdgpu.sgpr>
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %storage = storage {byte_alignment = 16, byte_length = 16} : low.storage<private>
+  %groups = s_add_u32 %group_x, %group_y
+  %group = s_add_u32 %groups, %group_z
+  %value = v_add_u32 %group, %lane
+  low.spill %value, %storage : reg<amdgpu.vgpr>, low.storage<private>
+  %reload = low.reload %storage : low.storage<private> -> reg<amdgpu.vgpr>
+  %sum = v_add_u32 %reload, %lane
+  return
+}
+
+// ----
+.text
+.amdgcn_target "amdgcn-amd-amdhsa--gfx90a"
+.amdhsa_code_object_version 6
+
+.protected private_storage
+.globl private_storage
+.p2align 8
+.type private_storage,@function
+private_storage:
+  s_add_u32 flat_scratch_lo, s4, s9
+  s_addc_u32 flat_scratch_hi, s5, 0
+  s_add_u32 s0, s6, s7
+  s_add_u32 s0, s0, s8
+  v_add_u32 v1, s0, v0
+  v_mov_b32 v2, 0
+  scratch_store_dword v2, v1, off offset:0
+  v_mov_b32 v1, 0
+  scratch_load_dword v1, v1, off offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(15)
+  v_add_u32 v0, v1, v0
+  s_endpgm
+.Lfunc_end0:
+.size private_storage, .Lfunc_end0-private_storage
+
+.rodata
+.p2align 6
+.amdhsa_kernel private_storage
+  .amdhsa_group_segment_fixed_size 0
+  .amdhsa_private_segment_fixed_size 16
+  .amdhsa_kernarg_size 0
+  .amdhsa_user_sgpr_count 6
+  .amdhsa_user_sgpr_private_segment_buffer 0
+  .amdhsa_user_sgpr_dispatch_ptr 0
+  .amdhsa_user_sgpr_queue_ptr 0
+  .amdhsa_user_sgpr_kernarg_segment_ptr 1
+  .amdhsa_user_sgpr_dispatch_id 1
+  .amdhsa_user_sgpr_flat_scratch_init 1
+  .amdhsa_user_sgpr_private_segment_size 0
+  .amdhsa_uses_dynamic_stack 0
+  .amdhsa_system_sgpr_private_segment_wavefront_offset 1
+  .amdhsa_system_sgpr_workgroup_id_x 1
+  .amdhsa_system_sgpr_workgroup_id_y 1
+  .amdhsa_system_sgpr_workgroup_id_z 1
+  .amdhsa_system_sgpr_workgroup_info 0
+  .amdhsa_system_vgpr_workitem_id 0
+  .amdhsa_next_free_vgpr 3
+  .amdhsa_next_free_sgpr 10
+  .amdhsa_accum_offset 4
+  .amdhsa_reserve_vcc 0
+  .amdhsa_reserve_flat_scratch 1
+  .amdhsa_float_round_mode_32 0
+  .amdhsa_float_round_mode_16_64 0
+  .amdhsa_float_denorm_mode_32 3
+  .amdhsa_float_denorm_mode_16_64 3
+  .amdhsa_dx10_clamp 1
+  .amdhsa_ieee_mode 1
+  .amdhsa_fp16_overflow 0
+  .amdhsa_tg_split 0
+  .amdhsa_exception_fp_ieee_invalid_op 0
+  .amdhsa_exception_fp_denorm_src 0
+  .amdhsa_exception_fp_ieee_div_zero 0
+  .amdhsa_exception_fp_ieee_overflow 0
+  .amdhsa_exception_fp_ieee_underflow 0
+  .amdhsa_exception_fp_ieee_inexact 0
+  .amdhsa_exception_int_div_zero 0
+.end_amdhsa_kernel
+
+.amdgpu_metadata
+  amdhsa.version:
+    - 1
+    - 2
+  amdhsa.target: 'amdgcn-amd-amdhsa--gfx90a'
+  amdhsa.kernels:
+    - .name: 'private_storage'
+      .symbol: 'private_storage.kd'
+      .kernarg_segment_size: 0
+      .group_segment_fixed_size: 0
+      .private_segment_fixed_size: 16
+      .kernarg_segment_align: 8
+      .wavefront_size: 64
+      .sgpr_count: 10
+      .vgpr_count: 3
+      .max_flat_workgroup_size: 64
+      .reqd_workgroup_size:
+        - 64
+        - 1
+        - 1
+      .args: []
+.end_amdgpu_metadata

@@ -27,6 +27,7 @@
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/facts.h"
 #include "loom/target/arch/amdgpu/hal/kernel_abi.h"
 #include "loom/target/arch/amdgpu/planning/address_state.h"
 #include "loom/target/arch/amdgpu/planning/descriptor_semantics.h"
@@ -604,6 +605,8 @@ class PacketPlanFixture {
     loom_amdgpu_hal_kernel_abi_verify_result_t abi_verify_result = {};
     AbortOnError(loom_amdgpu_hal_kernel_abi_verify_low(
         module_, low_function, resolved_target.descriptor_set,
+        loom_amdgpu_target_processor_properties_from_resolved_target(
+            &resolved_target),
         /*max_errors=*/20, /*emitter=*/{}, &abi_verify_result, &frame_arena_));
     if (abi_verify_result.error_count != 0) {
       std::abort();

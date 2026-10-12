@@ -468,13 +468,17 @@ typedef enum loom_amdgpu_kernel_descriptor_abi_flag_bits_e {
                                                                     << 3,
   // Workitem IDs are packed into v0 instead of separate VGPRs.
   LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID = UINT64_C(1) << 4,
+  // Flat scratch is an absolute address initialized from launch SGPRs.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_USER_FLAT_SCRATCH_INIT = UINT64_C(1)
+                                                                  << 5,
   // Kernel descriptor ABI flags known by the AMDGPU target package.
   LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS =
       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH |
       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING |
       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET |
       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE |
-      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID,
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_USER_FLAT_SCRATCH_INIT,
 } loom_amdgpu_kernel_descriptor_abi_flag_bits_t;
 
 // Bitset of loom_amdgpu_kernel_descriptor_abi_flag_bits_t values.
@@ -511,6 +515,8 @@ typedef enum loom_amdgpu_vector_memory_cache_policy_encoding_e {
   LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH = 2,
   // Vector memory descriptors expose NT/SC0/SC1 cache controls.
   LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = 3,
+  // CDNA2 vector memory descriptors expose GLC/SLC cache controls.
+  LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_CDNA2_GLC_SLC = 4,
 } loom_amdgpu_vector_memory_cache_policy_encoding_t;
 
 // Memory ordering is independent of the packet's cache-field encoding. In
@@ -527,6 +533,8 @@ typedef enum loom_amdgpu_memory_ordering_model_e {
   LOOM_AMDGPU_MEMORY_ORDERING_MODEL_GFX125 = 3,
   // CDNA3/4 scoped cache controls with unified vector completion.
   LOOM_AMDGPU_MEMORY_ORDERING_MODEL_CDNA = 4,
+  // CDNA2 write-through L1 and system-scope L2 writeback/invalidation.
+  LOOM_AMDGPU_MEMORY_ORDERING_MODEL_CDNA2 = 5,
 } loom_amdgpu_memory_ordering_model_t;
 
 typedef struct loom_amdgpu_descriptor_set_sopp_opcodes_t {

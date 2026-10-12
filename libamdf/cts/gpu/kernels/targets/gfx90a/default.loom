@@ -1,0 +1,1 @@
+amdgpu.target<gfx90a> @cts_kernel_target

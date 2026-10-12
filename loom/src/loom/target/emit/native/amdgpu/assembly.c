@@ -1683,63 +1683,6 @@ static iree_status_t loom_amdgpu_append_global_store_packet(
   return loom_amdgpu_append_offset_suffix(context);
 }
 
-static iree_status_t loom_amdgpu_append_scratch_load_packet(
-    const loom_native_assembly_packet_context_t* context) {
-  const loom_op_t* op = context->packet->node->op;
-  const iree_host_size_t explicit_operand_count =
-      loom_amdgpu_explicit_packet_operand_count(context);
-  if (op->result_count != 1 || explicit_operand_count > 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU scratch load packet has unexpected "
-                            "operand shape");
-  }
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(context->builder, " "));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_assignment(context, 0));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  if (explicit_operand_count == 1) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_operand(context, 0));
-  } else {
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_cstring(context->builder, "off"));
-  }
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(context->builder, "off"));
-  return loom_amdgpu_append_memory_immediate_suffixes(context);
-}
-
-static iree_status_t loom_amdgpu_append_scratch_store_packet(
-    const loom_native_assembly_packet_context_t* context) {
-  const loom_op_t* op = context->packet->node->op;
-  const iree_host_size_t explicit_operand_count =
-      loom_amdgpu_explicit_packet_operand_count(context);
-  if (op->result_count != 0 || explicit_operand_count == 0 ||
-      explicit_operand_count > 2) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU scratch store packet has unexpected "
-                            "operand shape");
-  }
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(context->builder, " "));
-  if (explicit_operand_count == 2) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_operand(context, 0));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_operand(context, 1));
-  } else {
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_cstring(context->builder, "off"));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_operand(context, 0));
-  }
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(context->builder, "off"));
-  return loom_amdgpu_append_memory_immediate_suffixes(context);
-}
-
 static iree_status_t loom_amdgpu_append_waitcnt_packet(
     const loom_native_assembly_packet_context_t* context) {
   int64_t vmcnt = 0;
@@ -1786,8 +1729,6 @@ typedef enum loom_amdgpu_descriptor_packet_route_kind_e {
   LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_UNSUPPORTED_READ_WRITE,
   LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_LOAD,
   LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_STORE,
-  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_LOAD,
-  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_STORE,
   LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_LOAD,
   LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_STORE,
   LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_WAITCNT,
@@ -1907,10 +1848,6 @@ static iree_status_t loom_amdgpu_append_descriptor_packet_route(
       return loom_amdgpu_append_mubuf_load_packet(context);
     case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_STORE:
       return loom_amdgpu_append_mubuf_store_packet(context);
-    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_LOAD:
-      return loom_amdgpu_append_scratch_load_packet(context);
-    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_STORE:
-      return loom_amdgpu_append_scratch_store_packet(context);
     case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_LOAD:
       return loom_amdgpu_append_global_load_packet(context);
     case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_STORE:
@@ -2003,7 +1940,7 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_SCRATCH_FORMAT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
-          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_LOAD,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_CANONICAL,
       },
       {
           .required_flags =
@@ -2011,7 +1948,7 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_SCRATCH_FORMAT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
-          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_STORE,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_CANONICAL,
       },
       {
           .required_flags =

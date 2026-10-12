@@ -1142,6 +1142,7 @@ def test_valu_schedule_class_separates_result_latency_from_issue_rate(
     descriptor_set: DescriptorSet,
 ) -> None:
     cdna_contracts = {
+        "amdgpu.cdna2.core",
         "amdgpu.cdna3.core",
         "amdgpu.cdna4.core",
         "amdgpu.gfx9_4.generic.core",
