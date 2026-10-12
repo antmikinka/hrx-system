@@ -8,7 +8,7 @@
 function(loom_target_profile)
   cmake_parse_arguments(_RULE "" "NAME;FAMILY;SELECTOR" "REQUIRES" ${ARGN})
   set(_AVAILABLE TRUE)
-  if(_RULE_REQUIRES)
+  if(DEFINED _RULE_REQUIRES)
     if(NOT (${_RULE_REQUIRES}))
       set(_AVAILABLE FALSE)
     endif()

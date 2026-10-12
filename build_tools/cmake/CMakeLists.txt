@@ -115,6 +115,15 @@ _iree_cmake_integration_test(
 
 _iree_cmake_integration_test(
   NAME
+    cmake_loom_corpus_test
+  SRCS
+    cmake_loom_corpus_test.py
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/build_tools/bazel_to_cmake"
+)
+
+_iree_cmake_integration_test(
+  NAME
     cmake_python_dependencies_test
   SRCS
     cmake_python_dependencies_test.py

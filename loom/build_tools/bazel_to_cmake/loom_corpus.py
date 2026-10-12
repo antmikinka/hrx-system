@@ -440,7 +440,7 @@ class LoomCorpusBuildFileFunctions:
                 + self._convert_string_arg_block(
                     "RESOURCE_GROUP", policy.resource_group
                 )
-                + self._convert_string_arg_block("REQUIRES", condition)
+                + (f"  REQUIRES\n    {condition}\n" if condition else "")
                 + ")\n\n"
             )
 

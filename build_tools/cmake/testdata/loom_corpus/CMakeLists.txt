@@ -1,0 +1,42 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+cmake_minimum_required(VERSION 3.26)
+project(loom_corpus_requirements NONE)
+set(IREE_BINARY_DIR "${CMAKE_BINARY_DIR}")
+set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(IREE_PACKAGE_ROOT_PREFIX "fixture")
+set(IREE_BUILD_TESTS ON)
+set(IREE_SKIP_TEST_REGISTRATION ON)
+include("${IREE_REPO_ROOT}/build_tools/cmake/iree_macros.cmake")
+include("${IREE_REPO_ROOT}/build_tools/cmake/iree_configure_testing.cmake")
+include("${IREE_REPO_ROOT}/build_tools/cmake/iree_native_test.cmake")
+include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loom_module.cmake")
+include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loom_test.cmake")
+include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loom_corpus.cmake")
+include("${IREE_REPO_ROOT}/loom/build_tools/cmake/loom_target_profile.cmake")
+# Only test registration is exercised; imported tools are never executed.
+foreach(_TOOL loom-link iree-test-loom)
+  add_executable(loom::tools::${_TOOL} IMPORTED GLOBAL)
+  set_target_properties(loom::tools::${_TOOL} PROPERTIES IMPORTED_LOCATION "${CMAKE_COMMAND}")
+endforeach()
+include("${LOOM_CONVERTED_RULES}")
+loom_finalize_corpus()
+loom_finalize_execution_tests()
+loom_finalize_module_libraries()
+iree_finalize_target_dependencies()
+iree_finalize_test_build_targets()
+
+get_property(_TARGETS DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+set(_AVAILABLE_PROFILES "")
+foreach(_TARGET IN LISTS _TARGETS)
+  get_target_property(_AVAILABLE "${_TARGET}" LOOM_PROFILE_AVAILABLE)
+  if(_AVAILABLE)
+    get_target_property(_NAME "${_TARGET}" LOOM_PROFILE_NAME)
+    string(APPEND _AVAILABLE_PROFILES "${_NAME}\n")
+  endif()
+endforeach()
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/available_profiles.txt" "${_AVAILABLE_PROFILES}")

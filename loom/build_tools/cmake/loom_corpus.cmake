@@ -584,8 +584,8 @@ function(_loom_declare_corpus_test ID)
   cmake_parse_arguments(
     _RULE
     ""
-    "NAME;PROFILE;RESOURCE_GROUP;REQUIRES"
-    "MANIFESTS;SOURCES;XFAILS;ALLOWED_FAILURES;EXCLUDES;ARGS;RUNNER_ARGS;LABELS"
+    "NAME;PROFILE;RESOURCE_GROUP"
+    "MANIFESTS;SOURCES;XFAILS;ALLOWED_FAILURES;EXCLUDES;ARGS;RUNNER_ARGS;LABELS;REQUIRES"
     ${_ARGUMENTS}
   )
   if(_RULE_UNPARSED_ARGUMENTS)
@@ -596,8 +596,10 @@ function(_loom_declare_corpus_test ID)
     message(FATAL_ERROR
       "loom_corpus_test(${_RULE_NAME}) requires MANIFESTS")
   endif()
-  if(_RULE_REQUIRES AND NOT (${_RULE_REQUIRES}))
-    return()
+  if(DEFINED _RULE_REQUIRES)
+    if(NOT (${_RULE_REQUIRES}))
+      return()
+    endif()
   endif()
 
   _loom_corpus_resolve_manifests(
