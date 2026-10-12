@@ -17,6 +17,29 @@ from loom.target.low_descriptors import OperandRole, RegClassAlt
 
 @pytest.mark.parametrize("target", _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS)
 @pytest.mark.parametrize("bit_width", [32, 64])
+def test_fma_residuals_use_operand_modifiers_on_every_family(target, bit_width) -> None:
+    overlays = {
+        overlay.descriptor_key: overlay
+        for overlay in _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS[target].overlay_rows()
+    }
+    for suffix, fields in (
+        ("", ("dst", "a", "b", "c")),
+        (".neg_a", ("dst", "a", "b", "c")),
+        (".neg_a_one", ("dst", "a", "b")),
+    ):
+        descriptor = overlays[f"amdgpu.v_fma_f{bit_width}{suffix}"]
+        assert descriptor.instruction_name == f"V_FMA_F{bit_width}"
+        assert descriptor.immediates == ()
+        operands = tuple(operand.descriptor_operand for operand in descriptor.operands)
+        assert tuple(operand.field_name for operand in operands) == fields
+        assert all(operand.unit_count == bit_width // 32 for operand in operands)
+        fixed = dict(descriptor.fixed_encoding_fields)
+        assert fixed.get("NEG", 0) == (1 if suffix else 0)
+        assert ("SRC2" in fixed) == (suffix == ".neg_a_one")
+
+
+@pytest.mark.parametrize("target", _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS)
+@pytest.mark.parametrize("bit_width", [32, 64])
 def test_ldexp_descriptors_cover_every_family(target, bit_width: int) -> None:
     overlays = {
         overlay.descriptor_key: overlay

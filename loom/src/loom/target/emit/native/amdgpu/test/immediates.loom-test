@@ -4,6 +4,32 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+// FMA residuals encode negation and 1.0 in the instruction at both widths,
+// including with a scalar multiplicand. No literal word or move is needed.
+// RUN: emit amdgpu-native-words @fma_residuals strategy=source waits=none fixed=%a:physical_register:0:1 fixed=%b:physical_register:0:1 fixed=%c:physical_register:1:1 fixed=%wide_a:physical_register:2:2 fixed=%wide_b:physical_register:2:2 fixed=%wide_c:physical_register:4:2 fixed=%residual:physical_register:6:1 fixed=%unit_residual:physical_register:7:1 fixed=%wide_residual:physical_register:8:2 fixed=%wide_unit_residual:physical_register:10:2
+amdgpu.target<gfx90a> @target
+
+low.func.def target<amdgpu.cdna2.core>(@target) @fma_residuals(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.sgpr>, %c: reg<amdgpu.vgpr>, %wide_a: reg<amdgpu.vgpr x2>, %wide_b: reg<amdgpu.sgpr x2>, %wide_c: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+  %residual = v_fma_f32_neg_a %a, %b, %c
+  %unit_residual = v_fma_f32_neg_a_one %a, %b
+  %wide_residual = v_fma_f64_neg_a %wide_a, %wide_b, %wide_c
+  %wide_unit_residual = v_fma_f64_neg_a_one %wide_a, %wide_b
+  return %residual, %unit_residual, %wide_residual, %wide_unit_residual
+}
+
+// ----
+0xD1CB0006
+0x24040100
+0xD1CB0007
+0x23C80100
+0xD1CC0008
+0x24100502
+0xD1CC000A
+0x23C80502
+0xBF810000
+
+// ====
+
 // Implicit fields and sparse named fields share the same roundtrip contract.
 // Explicit zero defaults disappear, and the descriptor order is canonical.
 // RUN: roundtrip

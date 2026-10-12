@@ -303,7 +303,7 @@ def _cdna_scalar_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_madak_f16_overlay(),
         _v_madmk_f16_overlay(),
         _v_fma_f16_overlay(),
-        _v_fma_f64_overlay(),
+        *_v_fma_overlays(64),
         _v_fmac_f64_overlay(),
     )
 
@@ -314,7 +314,7 @@ def _rdna_scalar_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fmac_f16_overlay(),
         _v_fmaak_f16_overlay(),
         _v_fmamk_f16_overlay(),
-        _v_fma_f64_overlay(),
+        *_v_fma_overlays(64),
     )
 
 
@@ -335,8 +335,6 @@ def _floating_arithmetic_support_overlays() -> tuple[AmdgpuDescriptorOverlay, ..
         _v_rndne_f64_overlay(),
         _v_trunc_f64_overlay(),
         _v_sub_f64_overlay(),
-        _v_fma_f64_neg_a_overlay(),
-        _v_fma_f64_neg_a_one_overlay(),
         _v_sqrt_f64_overlay(),
         _v_rsq_f64_overlay(),
         _v_ldexp_f64_overlay(),
@@ -446,7 +444,7 @@ def _cdna_core_overlays(
         *_v_binary_f16_overlays(),
         _v_med3_num_f32_overlay(),
         *_v_binary_f32_dpp_legacy_overlays(),
-        _v_fma_f32_overlay(),
+        *_v_fma_overlays(32),
         *(
             (_v_fmaak_f32_overlay(), _v_fmamk_f32_product_flushing_overlay())
             if isa_generation >= 3
@@ -1184,7 +1182,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_med3_num_f32_overlay(),
         *_v_binary_f32_dpp16_overlays(),
         *_v_subrev_f32_overlays(),
-        _v_fma_f32_overlay(),
+        *_v_fma_overlays(32),
         _v_fmaak_f32_overlay(),
         *_v_interp_overlays(),
         _v_fmac_f32_overlay(),
@@ -2046,7 +2044,7 @@ def _rdna4_core_overlays(
         *_s_float_arithmetic_overlays(),
         *_s_float_compare_overlays(),
         *_s_float_conversion_overlays(),
-        _v_fma_f32_overlay(),
+        *_v_fma_overlays(32),
         _v_fmaak_f32_overlay(),
         *_v_interp_overlays(op_sel_field="OPSEL"),
         _v_fmac_f32_overlay(),

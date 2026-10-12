@@ -12,15 +12,146 @@ amdgpu.target<gfx11-generic> @target {subgroup_size = 64}
 low.func.def target<amdgpu.gfx11.generic.core>(@target) abi(hal_kernel) @f32_exact_scalar_div(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm {
   %7, %8 = v_div_scale_f32 %rhs, %rhs, %lhs
   %9 = v_rcp_f32 %7
-  %10 = v_xor_b32_lit %7, 2147483648
-  %11 = v_fmaak_f32 %10, %9, 1065353216
-  %12 = v_fma_f32 %11, %9, %9
-  %13, %14 = v_div_scale_f32 %lhs, %rhs, %lhs
-  %15 = v_mul_f32 %13, %12
-  %16 = v_fma_f32 %10, %15, %13
-  %17 = v_fma_f32 %16, %12, %15
-  %18 = v_fma_f32 %10, %17, %13
-  %19 = v_div_fmas_f32 %18, %12, %17, %14
-  %quotient = v_div_fixup_f32 %19, %rhs, %lhs
+  %10 = v_fma_f32_neg_a_one %7, %9
+  %11 = v_fma_f32 %10, %9, %9
+  %12, %13 = v_div_scale_f32 %lhs, %rhs, %lhs
+  %14 = v_mul_f32 %12, %11
+  %15 = v_fma_f32_neg_a %7, %14, %12
+  %16 = v_fma_f32 %15, %11, %14
+  %17 = v_fma_f32_neg_a %7, %16, %12
+  %18 = v_div_fmas_f32 %17, %11, %16, %13
+  %quotient = v_div_fixup_f32 %18, %rhs, %lhs
+  return %quotient
+}
+
+// ====
+
+// CDNA2 has ordinary FMA with inline constants and source modifiers, but no
+// FMAAK. Scalar and vector division share the same residual calculation.
+amdgpu.target<gfx90a> @target
+
+func.def target(@target) @scalar_quotient(%lhs: f32, %rhs: f32) -> (f32) {
+  %quotient = scalar.divf %lhs, %rhs : f32
+  func.return %quotient : f32
+}
+
+func.def target(@target) @vector_quotient(%lhs: vector<2xf32>, %rhs: vector<2xf32>) -> (vector<2xf32>) {
+  %quotient = vector.divf %lhs, %rhs : vector<2xf32>
+  func.return %quotient : vector<2xf32>
+}
+
+// ----
+amdgpu.target<gfx90a> @target
+
+low.func.def target<amdgpu.cdna2.core>(@target) abi(hal_kernel) @scalar_quotient(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm {
+  %11, %12 = v_div_scale_f32 %rhs, %rhs, %lhs
+  %13 = v_rcp_f32 %11
+  %14 = v_fma_f32_neg_a_one %11, %13
+  %15 = v_fma_f32 %14, %13, %13
+  %16, %17 = v_div_scale_f32 %lhs, %rhs, %lhs
+  %18 = v_mul_f32 %16, %15
+  %19 = v_fma_f32_neg_a %11, %18, %16
+  %20 = v_fma_f32 %19, %15, %18
+  %21 = v_fma_f32_neg_a %11, %20, %16
+  %22 = v_div_fmas_f32 %21, %15, %20, %17
+  %quotient = v_div_fixup_f32 %22, %rhs, %lhs
+  return %quotient
+}
+
+low.func.def target<amdgpu.cdna2.core>(@target) abi(hal_kernel) @vector_quotient(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm {
+  %27 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %28 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %29 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %30, %31 = v_div_scale_f32 %27, %28, %29
+  %32 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %33 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %34 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %35, %36 = v_div_scale_f32 %32, %33, %34
+  %37 = concat(%30, %35) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %39 = slice %37[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %40 = v_rcp_f32 %39
+  %41 = slice %37[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %42 = v_rcp_f32 %41
+  %43 = concat(%40, %42) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %44 = slice %37[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %45 = slice %43[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %46 = v_fma_f32_neg_a_one %44, %45
+  %47 = slice %37[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %48 = slice %43[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %49 = v_fma_f32_neg_a_one %47, %48
+  %50 = concat(%46, %49) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %51 = slice %50[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %52 = slice %43[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %53 = slice %43[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %54 = v_fma_f32 %51, %52, %53
+  %55 = slice %50[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %56 = slice %43[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %57 = slice %43[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %58 = v_fma_f32 %55, %56, %57
+  %59 = concat(%54, %58) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %60 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %61 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %62 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %63, %64 = v_div_scale_f32 %60, %61, %62
+  %65 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %66 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %67 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %68, %69 = v_div_scale_f32 %65, %66, %67
+  %70 = concat(%63, %68) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %71 = concat(%64, %69) : (reg<amdgpu.vcc>, reg<amdgpu.vcc>) -> reg<amdgpu.vcc x2>
+  %72 = slice %70[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %73 = slice %59[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %74 = v_mul_f32 %72, %73
+  %75 = slice %70[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %76 = slice %59[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %77 = v_mul_f32 %75, %76
+  %78 = concat(%74, %77) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %79 = slice %37[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %80 = slice %78[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %81 = slice %70[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %82 = v_fma_f32_neg_a %79, %80, %81
+  %83 = slice %37[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %84 = slice %78[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %85 = slice %70[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %86 = v_fma_f32_neg_a %83, %84, %85
+  %87 = concat(%82, %86) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %88 = slice %87[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %89 = slice %59[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %90 = slice %78[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %91 = v_fma_f32 %88, %89, %90
+  %92 = slice %87[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %93 = slice %59[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %94 = slice %78[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %95 = v_fma_f32 %92, %93, %94
+  %96 = concat(%91, %95) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %97 = slice %37[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %98 = slice %96[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %99 = slice %70[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %100 = v_fma_f32_neg_a %97, %98, %99
+  %101 = slice %37[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %102 = slice %96[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %103 = slice %70[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %104 = v_fma_f32_neg_a %101, %102, %103
+  %105 = concat(%100, %104) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %106 = slice %105[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %107 = slice %59[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %108 = slice %96[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %109 = slice %71[0] : reg<amdgpu.vcc x2> -> reg<amdgpu.vcc>
+  %110 = v_div_fmas_f32 %106, %107, %108, %109
+  %111 = slice %105[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %112 = slice %59[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %113 = slice %96[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %114 = slice %71[1] : reg<amdgpu.vcc x2> -> reg<amdgpu.vcc>
+  %115 = v_div_fmas_f32 %111, %112, %113, %114
+  %116 = concat(%110, %115) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %117 = slice %116[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %118 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %119 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %120 = v_div_fixup_f32 %117, %118, %119
+  %121 = slice %116[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %122 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %123 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %124 = v_div_fixup_f32 %121, %122, %123
+  %quotient = concat(%120, %124) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %quotient
 }

@@ -133,6 +133,8 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_sub_f16",
     "amdgpu.v_mul_f16",
     "amdgpu.v_fma_f32",
+    "amdgpu.v_fma_f32.neg_a",
+    "amdgpu.v_fma_f32.neg_a_one",
     "amdgpu.v_fmaak_f32",
     "amdgpu.v_fmamk_f32",
     "amdgpu.v_fmamk_f32.flush_product",
@@ -2130,12 +2132,10 @@ def _divf_arcp_rule(
 def _divf_exact_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
     scale = _descriptor("amdgpu.v_div_scale_f32")
     reciprocal = _descriptor("amdgpu.v_rcp_f32")
-    negate = _descriptor("amdgpu.v_xor_b32.lit")
     multiply = _descriptor("amdgpu.v_mul_f32")
     fma = _descriptor("amdgpu.v_fma_f32")
-    # DIV_SCALE keeps this product near one. It cannot enter the subnormal
-    # range where the literal FMAAK form has weaker behavior on CDNA.
-    fmaak = _descriptor("amdgpu.v_fmaak_f32")
+    neg_fma = _descriptor("amdgpu.v_fma_f32.neg_a")
+    neg_fma_one = _descriptor("amdgpu.v_fma_f32.neg_a_one")
     fmas = _descriptor("amdgpu.v_div_fmas_f32")
     fixup = _descriptor("amdgpu.v_div_fixup_f32")
     result_type = _F32
@@ -2159,10 +2159,10 @@ def _divf_exact_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule
             ),
             Guard.descriptor_available(scale),
             Guard.descriptor_available(reciprocal),
-            Guard.descriptor_available(negate),
             Guard.descriptor_available(multiply),
             Guard.descriptor_available(fma),
-            Guard.descriptor_available(fmaak),
+            Guard.descriptor_available(neg_fma),
+            Guard.descriptor_available(neg_fma_one),
             Guard.descriptor_available(fmas),
             Guard.descriptor_available(fixup),
         ),
@@ -2192,22 +2192,13 @@ def _divf_exact_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule
                 form=_emit_form(type_pattern),
             ),
             EmitDescriptorOp(
-                descriptor=negate,
-                operands={"rhs": ValueRef.temporary("scaled_denominator")},
-                results={"dst": ValueRef.temporary("neg_scaled_denominator")},
-                result_types={"dst": result_type},
-                immediates={"imm32": _F32_SIGN_MASK},
-                form=_emit_form(type_pattern),
-            ),
-            EmitDescriptorOp(
-                descriptor=fmaak,
+                descriptor=neg_fma_one,
                 operands={
-                    "a": ValueRef.temporary("neg_scaled_denominator"),
+                    "a": ValueRef.temporary("scaled_denominator"),
                     "b": ValueRef.temporary("reciprocal"),
                 },
                 results={"dst": ValueRef.temporary("reciprocal_error")},
                 result_types={"dst": result_type},
-                immediates={"imm32": _F32_ONE_BITS},
                 form=_emit_form(type_pattern),
             ),
             EmitDescriptorOp(
@@ -2249,9 +2240,9 @@ def _divf_exact_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule
                 form=_emit_form(type_pattern),
             ),
             EmitDescriptorOp(
-                descriptor=fma,
+                descriptor=neg_fma,
                 operands={
-                    "a": ValueRef.temporary("neg_scaled_denominator"),
+                    "a": ValueRef.temporary("scaled_denominator"),
                     "b": ValueRef.temporary("quotient0"),
                     "c": ValueRef.temporary("scaled_numerator"),
                 },
@@ -2271,9 +2262,9 @@ def _divf_exact_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule
                 form=_emit_form(type_pattern),
             ),
             EmitDescriptorOp(
-                descriptor=fma,
+                descriptor=neg_fma,
                 operands={
-                    "a": ValueRef.temporary("neg_scaled_denominator"),
+                    "a": ValueRef.temporary("scaled_denominator"),
                     "b": ValueRef.temporary("quotient1"),
                     "c": ValueRef.temporary("scaled_numerator"),
                 },

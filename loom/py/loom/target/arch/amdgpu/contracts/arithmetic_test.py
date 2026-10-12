@@ -617,7 +617,7 @@ def test_f32_literal_fma_product_flushing_forms_require_afn() -> None:
         )
 
 
-def test_exact_f32_division_uses_scaled_fmaak_product() -> None:
+def test_exact_f32_division_uses_negated_fma_residuals() -> None:
     compiled = _compiled_arithmetic_rules()
 
     for source_op in (scalar_arithmetic.scalar_divf, vector.vector_divf):
@@ -628,7 +628,19 @@ def test_exact_f32_division_uses_scaled_fmaak_product() -> None:
         )
         assert len(exact_rules) == 1
         descriptor_keys = _rule_descriptor_keys(compiled, exact_rules[0])
-        assert "amdgpu.v_fmaak_f32" in descriptor_keys
+        assert descriptor_keys == (
+            "amdgpu.v_div_scale_f32",
+            "amdgpu.v_rcp_f32",
+            "amdgpu.v_fma_f32.neg_a_one",
+            "amdgpu.v_fma_f32",
+            "amdgpu.v_div_scale_f32",
+            "amdgpu.v_mul_f32",
+            "amdgpu.v_fma_f32.neg_a",
+            "amdgpu.v_fma_f32",
+            "amdgpu.v_fma_f32.neg_a",
+            "amdgpu.v_div_fmas_f32",
+            "amdgpu.v_div_fixup_f32",
+        )
 
 
 def test_packed_f16_arithmetic_rules_publish_native_pk_ops() -> None:

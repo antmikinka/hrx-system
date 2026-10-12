@@ -261,16 +261,15 @@ low.kernel.def target<amdgpu.gfx11.generic.core> abi_layout({constant_count = 0,
   %rhs = global_load_b32_saddr %17, %rhs_view
   %21, %22 = v_div_scale_f32 %rhs, %rhs, %lhs
   %23 = v_rcp_f32 %21
-  %24 = v_xor_b32_lit %21, 2147483648
-  %25 = v_fmaak_f32 %24, %23, 1065353216
-  %26 = v_fma_f32 %25, %23, %23
-  %27, %28 = v_div_scale_f32 %lhs, %rhs, %lhs
-  %29 = v_mul_f32 %27, %26
-  %30 = v_fma_f32 %24, %29, %27
-  %31 = v_fma_f32 %30, %26, %29
-  %32 = v_fma_f32 %24, %31, %27
-  %33 = v_div_fmas_f32 %32, %26, %31, %28
-  %quotient = v_div_fixup_f32 %33, %rhs, %lhs
+  %24 = v_fma_f32_neg_a_one %21, %23
+  %25 = v_fma_f32 %24, %23, %23
+  %26, %27 = v_div_scale_f32 %lhs, %rhs, %lhs
+  %28 = v_mul_f32 %26, %25
+  %29 = v_fma_f32_neg_a %21, %28, %26
+  %30 = v_fma_f32 %29, %25, %28
+  %31 = v_fma_f32_neg_a %21, %30, %26
+  %32 = v_div_fmas_f32 %31, %25, %30, %27
+  %quotient = v_div_fixup_f32 %32, %rhs, %lhs
   global_store_b32_saddr %17, %quotient, %output_view
   return
 }
@@ -301,16 +300,15 @@ low.func.def target<amdgpu.gfx11.generic.core> abi(hal_kernel) @f32_exact_scalar
   %22 = v_mov_b32_copy %lhs
   %23, %24 = v_div_scale_f32 %20, %20, %22
   %25 = v_rcp_f32 %23
-  %26 = v_xor_b32_lit %23, 2147483648
-  %27 = v_fmaak_f32 %26, %25, 1065353216
-  %28 = v_fma_f32 %27, %25, %25
-  %32, %33 = v_div_scale_f32 %22, %20, %22
-  %34 = v_mul_f32 %32, %28
-  %35 = v_fma_f32 %26, %34, %32
-  %36 = v_fma_f32 %35, %28, %34
-  %37 = v_fma_f32 %26, %36, %32
-  %38 = v_div_fmas_f32 %37, %28, %36, %33
-  %quotient = v_div_fixup_f32 %38, %20, %22
+  %26 = v_fma_f32_neg_a_one %23, %25
+  %27 = v_fma_f32 %26, %25, %25
+  %31, %32 = v_div_scale_f32 %22, %20, %22
+  %33 = v_mul_f32 %31, %27
+  %34 = v_fma_f32_neg_a %23, %33, %31
+  %35 = v_fma_f32 %34, %27, %33
+  %36 = v_fma_f32_neg_a %23, %35, %31
+  %37 = v_div_fmas_f32 %36, %27, %35, %32
+  %quotient = v_div_fixup_f32 %37, %20, %22
   return %quotient
 }
 

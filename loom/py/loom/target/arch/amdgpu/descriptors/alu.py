@@ -3254,24 +3254,6 @@ def _v_subrev_f32_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     )
 
 
-def _v_fma_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.v_fma_f32",
-        instruction_name="V_FMA_F32",
-        mnemonic="v_fma_f32",
-        encoding_name="ENC_VOP3",
-        semantic_tag="float.fma.f32",
-        schedule_class=_SCHEDULE_VALU,
-        operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a")),
-            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("b")),
-            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("c")),
-        ),
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
-    )
-
-
 _V_INTERP_HALF_REGISTER_PARTS = (
     ("lo", _REG_PART_VGPR_LOW16, 0),
     ("hi", _REG_PART_VGPR_HIGH16, 1),
@@ -4561,42 +4543,23 @@ def _v_madmk_f16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _v_fma_f64_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.v_fma_f64",
-        instruction_name="V_FMA_F64",
-        mnemonic="v_fma_f64",
-        encoding_name="ENC_VOP3",
-        semantic_tag="float.fma.f64",
-        schedule_class=_SCHEDULE_VALU,
-        operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_result(units=2)),
-            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a", units=2)),
-            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("b", units=2)),
-            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("c", units=2)),
-        ),
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+def _v_fma_overlays(element_bit_width: int) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    base = _v_ternary_float_overlay(
+        descriptor_key=f"amdgpu.v_fma_f{element_bit_width}",
+        instruction_name=f"V_FMA_F{element_bit_width}",
+        mnemonic=f"v_fma_f{element_bit_width}",
+        semantic_tag=f"float.fma.f{element_bit_width}",
+        element_bit_width=element_bit_width,
     )
-
-
-def _v_fma_f64_neg_a_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.v_fma_f64.neg_a",
-        instruction_name="V_FMA_F64",
-        mnemonic="v_fma_f64_neg_a",
-        encoding_name="ENC_VOP3",
-        semantic_tag="float.fma.f64.neg_a",
-        schedule_class=_SCHEDULE_VALU,
-        operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_result(units=2)),
-            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a", units=2)),
-            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("b", units=2)),
-            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("c", units=2)),
-        ),
+    neg_a = replace(
+        base,
+        descriptor_key=f"{base.descriptor_key}.neg_a",
+        mnemonic=f"{base.mnemonic}_neg_a",
+        semantic_tag=f"{base.semantic_tag}.neg_a",
         asm_forms=_asm(
             results=("dst",),
             operands=("a", "b", "c"),
-            native_assembly_mnemonic="v_fma_f64",
+            native_assembly_mnemonic=base.mnemonic,
             native_assembly_values=(
                 _native_result("dst"),
                 _native_negated_operand("a"),
@@ -4605,27 +4568,17 @@ def _v_fma_f64_neg_a_overlay() -> AmdgpuDescriptorOverlay:
             ),
         ),
         fixed_encoding_fields=(("NEG", 1),),
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
-
-
-def _v_fma_f64_neg_a_one_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.v_fma_f64.neg_a_one",
-        instruction_name="V_FMA_F64",
-        mnemonic="v_fma_f64_neg_a_one",
-        encoding_name="ENC_VOP3",
-        semantic_tag="float.fma.f64.neg_a_one",
-        schedule_class=_SCHEDULE_VALU,
-        operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_result(units=2)),
-            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a", units=2)),
-            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("b", units=2)),
-        ),
+    neg_a_one = replace(
+        base,
+        descriptor_key=f"{base.descriptor_key}.neg_a_one",
+        mnemonic=f"{base.mnemonic}_neg_a_one",
+        semantic_tag=f"{base.semantic_tag}.neg_a_one",
+        operands=base.operands[:-1],
         asm_forms=_asm(
             results=("dst",),
             operands=("a", "b"),
-            native_assembly_mnemonic="v_fma_f64",
+            native_assembly_mnemonic=base.mnemonic,
             native_assembly_values=(
                 _native_result("dst"),
                 _native_negated_operand("a"),
@@ -4637,8 +4590,8 @@ def _v_fma_f64_neg_a_one_overlay() -> AmdgpuDescriptorOverlay:
             ("NEG", 1),
             ("SRC2", _predefined("1.0", "OPR_SRC")),
         ),
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
+    return base, neg_a, neg_a_one
 
 
 def _v_fmac_f64_overlay() -> AmdgpuDescriptorOverlay:
@@ -8212,11 +8165,8 @@ __all__ = (
     "_v_fma_f16_overlay",
     "_v_fmaak_f32_overlay",
     "_v_fmaak_f16_overlay",
-    "_v_fma_f32_overlay",
+    "_v_fma_overlays",
     "_v_interp_overlays",
-    "_v_fma_f64_overlay",
-    "_v_fma_f64_neg_a_overlay",
-    "_v_fma_f64_neg_a_one_overlay",
     "_v_fma_mix_f32_overlay",
     "_v_fma_mix_f32_overlays",
     "_v_fma_mix_f32_src2_literal_overlay",
