@@ -21,6 +21,12 @@ from loom.target.arch.amdgpu.descriptors.cdna import (
     AMDGPU_MFMA_TIMINGS_BY_DESCRIPTOR_SET,
 )
 from loom.target.arch.amdgpu.descriptors.common import _amdgpu_mfma_schedule_class_name
+from loom.target.arch.amdgpu.descriptors.matrix import _cdna2_matrix_rows
+from loom.target.arch.amdgpu.descriptors.sets import (
+    _gfx9_4_generic_core_overlays,
+    _gfx940_core_overlays,
+    _gfx950_core_overlays,
+)
 from loom.target.arch.amdgpu.encoding import (
     AMDGPU_ENCODING_FIELD_IDS,
     AMDGPU_ENCODING_FORMAT_IDS,
@@ -367,21 +373,73 @@ def test_descriptor_trait_names_include_resource_and_encoding_facts() -> None:
 
 
 def test_matrix_pass_traits_are_independent_of_latency_estimates() -> None:
-    for descriptor_set in (
-        _AMDGPU_CDNA2_CORE_DESCRIPTOR_SET_BASE,
-        _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
-        _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
-        _AMDGPU_GFX9_4_GENERIC_CORE_DESCRIPTOR_SET_BASE,
+    for descriptor_set, overlays in (
+        (_AMDGPU_CDNA2_CORE_DESCRIPTOR_SET_BASE, tuple(overlay for overlay, _ in _cdna2_matrix_rows())),
+        (_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE, _gfx940_core_overlays()),
+        (_AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE, _gfx950_core_overlays()),
+        (_AMDGPU_GFX9_4_GENERIC_CORE_DESCRIPTOR_SET_BASE, _gfx9_4_generic_core_overlays()),
     ):
+        overlays_by_key = {overlay.descriptor_key: overlay for overlay in overlays}
         descriptor_set = replace(
             descriptor_set,
             schedule_classes=tuple(replace(row, latency_cycles=91) for row in descriptor_set.schedule_classes),
         )
         context = amdgpu_target_refs._descriptor_trait_context(descriptor_set)
         for key, timing in AMDGPU_MFMA_TIMINGS_BY_DESCRIPTOR_SET[descriptor_set.key].items():
-            descriptor = _descriptor(key, schedule_class=_amdgpu_mfma_schedule_class_name(key))
+            descriptor = _descriptor(key, schedule_class=_amdgpu_mfma_schedule_class_name(key), semantic_tag=overlays_by_key[key].semantic_tag)
             traits = amdgpu_target_refs._descriptor_trait_names(context, descriptor)
             assert f"({timing.execution_passes}u << LOOM_AMDGPU_DESCRIPTOR_MATRIX_PASSES_SHIFT)" in traits
+
+
+def test_matrix_pipeline_traits_preserve_arithmetic_semantics() -> None:
+    context = amdgpu_target_refs._descriptor_trait_context(_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE)
+    overlays_by_semantic = {overlay.semantic_tag: overlay for overlay in _gfx940_core_overlays()}
+    # Physical result width cannot distinguish these pipelines. Sparse and
+    # reduced-precision F32 instructions belong to XDL along with narrow inputs.
+    for semantic, expected in (
+        ("matrix.mfma.f32.16x16x4.f32", ()),
+        ("matrix.mfma.f64.16x16x4.f64", ("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_DGEMM",)),
+        ("matrix.mfma.f32.16x16x16.f16", ("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_XDL",)),
+        ("matrix.mfma.f32.16x16x16.bf16.1k", ("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_XDL",)),
+        ("matrix.mfma.f32.16x16x8.xf32", ("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_XDL",)),
+        ("matrix.mfma.i32.16x16x32.i8", ("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_XDL",)),
+        ("matrix.smfmac.f32.16x16x32.bf16", ("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_XDL",)),
+    ):
+        overlay = overlays_by_semantic[semantic]
+        descriptor = _descriptor(overlay.descriptor_key, semantic_tag=semantic, schedule_class=overlay.schedule_class)
+        traits = amdgpu_target_refs._descriptor_trait_names(context, descriptor)
+        assert tuple(trait for trait in traits if trait.endswith(("MATRIX_DGEMM", "MATRIX_XDL"))) == expected
+
+
+def test_matrix_memory_read_traits_cover_all_native_memory_formats() -> None:
+    for name in (
+        "ENC_MUBUF",
+        "ENC_MTBUF",
+        "ENC_FLAT",
+        "ENC_FLAT_GLBL",
+        "ENC_FLAT_SCRATCH",
+        "ENC_MIMG",
+        "MIMG_NSA1",
+        "MIMG_NSA2",
+        "MIMG_NSA3",
+        "ENC_DS",
+        "ENC_EXP",
+        "ENC_VBUFFER",
+        "ENC_VFLAT",
+        "ENC_VGLOBAL",
+        "ENC_VSCRATCH",
+        "ENC_VIMAGE",
+        "ENC_VSAMPLE",
+        "ENC_VDS",
+        "ENC_VEXPORT",
+    ):
+        descriptor = _descriptor("amdgpu.memory", encoding_format_id=AMDGPU_ENCODING_FORMAT_IDS[name])
+        context = amdgpu_target_refs._descriptor_trait_context(_descriptor_set(descriptor))
+        assert "LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_MEMORY_CONSUMER" in amdgpu_target_refs._descriptor_trait_names(context, descriptor), name
+    for name in ("ENC_VOP1", "ENC_SMEM", "ENC_SOPP"):
+        descriptor = _descriptor("amdgpu.other", encoding_format_id=AMDGPU_ENCODING_FORMAT_IDS[name])
+        context = amdgpu_target_refs._descriptor_trait_context(_descriptor_set(descriptor))
+        assert "LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_MEMORY_CONSUMER" not in amdgpu_target_refs._descriptor_trait_names(context, descriptor), name
 
 
 def test_descriptor_trait_names_classify_dpp_encoding_families() -> None:
@@ -539,6 +597,7 @@ def test_descriptor_trait_names_include_memory_and_ref_facts() -> None:
     assert amdgpu_target_refs._descriptor_trait_names(trait_context, descriptor_set.descriptors[0]) == (
         "LOOM_AMDGPU_DESCRIPTOR_TRAIT_SCALAR_ALU",
         "LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_MEMORY",
+        "LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_MEMORY_CONSUMER",
     )
     assert amdgpu_target_refs._descriptor_trait_names(trait_context, descriptor_set.descriptors[1]) == (
         "LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_ALU",

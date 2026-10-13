@@ -110,54 +110,6 @@ typedef enum loom_amdgpu_wait_state_reason_flag_bits_e {
 } loom_amdgpu_wait_state_reason_flag_bits_t;
 typedef uint32_t loom_amdgpu_wait_state_reason_flags_t;
 
-typedef enum loom_amdgpu_wait_state_matrix_result_use_e {
-  LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN = 0,
-  LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_NON_MATRIX = 1,
-  LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC = 2,
-  LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_EXACT = 3,
-  LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_OVERLAP = 4,
-  LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB = 5,
-} loom_amdgpu_wait_state_matrix_result_use_t;
-
-enum {
-  LOOM_AMDGPU_WAIT_STATE_MATRIX_FAMILY_USE_COUNT =
-      LOOM_AMDGPU_MATRIX_FAMILY_SWMMAC + 1,
-  LOOM_AMDGPU_WAIT_STATE_MATRIX_OPERAND_USE_CAPACITY = 4,
-};
-
-typedef struct loom_amdgpu_wait_state_matrix_family_use_row_t {
-  // Non-zero when this matrix family reads VALU results as matrix inputs.
-  uint8_t reads_valu_results;
-  // Matrix result use kind for each packet operand index.
-  loom_amdgpu_wait_state_matrix_result_use_t
-      operand_uses[LOOM_AMDGPU_WAIT_STATE_MATRIX_OPERAND_USE_CAPACITY];
-} loom_amdgpu_wait_state_matrix_family_use_row_t;
-
-static const loom_amdgpu_wait_state_matrix_family_use_row_t
-    kMatrixFamilyUseRows[LOOM_AMDGPU_WAIT_STATE_MATRIX_FAMILY_USE_COUNT] = {
-        [LOOM_AMDGPU_MATRIX_FAMILY_MFMA] =
-            {
-                .reads_valu_results = 1,
-                .operand_uses =
-                    {
-                        LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB,
-                        LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB,
-                        LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC,
-                    },
-            },
-        [LOOM_AMDGPU_MATRIX_FAMILY_SMFMAC] =
-            {
-                .reads_valu_results = 1,
-                .operand_uses =
-                    {
-                        LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC,
-                        LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB,
-                        LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB,
-                        LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB,
-                    },
-            },
-};
-
 typedef struct loom_amdgpu_wait_state_hazard_t {
   // Active-state flags for this physical VGPR.
   loom_amdgpu_wait_state_vgpr_flags_t flags;
@@ -171,11 +123,14 @@ typedef struct loom_amdgpu_wait_state_hazard_t {
   uint32_t producer_location_count;
   // Instruction-position immediately after the producer packet.
   uint64_t producer_end_position;
-  // Matrix execution pass count for matrix-result hazards, or zero.
-  uint16_t matrix_pass_count;
+  // Producer descriptor identity and pipeline facts for matrix-result hazards.
+  loom_amdgpu_matrix_instruction_t matrix;
   // Required wait cycles before the matching consumer reads the VGPR.
   uint16_t required_cycle_count;
 } loom_amdgpu_wait_state_hazard_t;
+
+static_assert(sizeof(loom_amdgpu_wait_state_hazard_t) <= 40,
+              "physical hazard facts must fit the existing state budget");
 
 typedef struct loom_amdgpu_wait_state_vgpr_t {
   // Per-reason outstanding fixed-wait hazard state for this physical VGPR.
@@ -217,7 +172,6 @@ typedef struct loom_amdgpu_wait_state_match_t {
 typedef enum loom_amdgpu_wait_state_packet_flag_bits_e {
   LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_DESCRIPTOR = 1u << 0,
   LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_MATRIX = 1u << 1,
-  LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_MATRIX_READS_VALU = 1u << 2,
   LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_TRANS_PRODUCER = 1u << 3,
   LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_TRANS_FORWARDING_CONSUMER = 1u << 4,
   LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_USES_VECTOR_ALU = 1u << 5,
@@ -246,10 +200,8 @@ typedef struct loom_amdgpu_wait_state_packet_info_t {
   loom_amdgpu_delay_alu_type_t delay_alu_type;
   // Modeled latency used when recording delay-ALU producers.
   uint16_t delay_alu_latency_cycles;
-  // Matrix result pass count used by fixed matrix wait tables.
-  uint16_t matrix_pass_count;
-  // Matrix wait cycles needed before ordinary consumers.
-  uint16_t matrix_wait_cycles;
+  // Matrix descriptor identity and pipeline facts retained from the descriptor.
+  loom_amdgpu_matrix_instruction_t matrix;
 } loom_amdgpu_wait_state_packet_info_t;
 
 typedef struct loom_amdgpu_wait_state_builder_t {
@@ -273,8 +225,10 @@ typedef struct loom_amdgpu_wait_state_builder_t {
   iree_arena_allocator_t* arena;
   // Arena that owns builder state discarded after plan construction.
   iree_arena_allocator_t* transient_arena;
-  // Processor properties selected by the low target, or NULL if unavailable.
+  // Processor properties established by target-record resolution.
   const loom_amdgpu_processor_properties_t* processor_properties;
+  // Native matrix wait contract selected by the resolved processor.
+  loom_amdgpu_matrix_wait_profile_t matrix_wait_profile;
   // Cached processor scheduling and fixed-wait hazard feature bits.
   loom_amdgpu_processor_scheduling_bits_t processor_scheduling;
   // True when the selected processor and descriptor set can emit S_DELAY_ALU.
@@ -522,92 +476,6 @@ static iree_status_t loom_amdgpu_wait_state_allocate(
   return iree_ok_status();
 }
 
-static const loom_amdgpu_matrix_contract_descriptor_t*
-loom_amdgpu_wait_state_contract_for_descriptor(
-    const loom_amdgpu_wait_state_builder_t* builder,
-    const loom_low_descriptor_t* descriptor) {
-  const loom_amdgpu_descriptor_ref_t descriptor_ref =
-      loom_amdgpu_descriptor_ref_for_descriptor(builder->descriptor_set,
-                                                descriptor);
-  return loom_amdgpu_matrix_contract_wait_state_descriptor_for_low_descriptor_ref(
-      descriptor_ref);
-}
-
-static bool loom_amdgpu_wait_state_matrix_result_table_use(
-    loom_amdgpu_wait_state_matrix_result_use_t use,
-    loom_amdgpu_matrix_wait_result_use_t* out_table_use) {
-  *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN;
-  switch (use) {
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_NON_MATRIX:
-      *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX;
-      return true;
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_EXACT:
-      *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT;
-      return true;
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_OVERLAP:
-      *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP;
-      return true;
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB:
-      *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB;
-      return true;
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC:
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN:
-    default:
-      return false;
-  }
-}
-
-static loom_amdgpu_matrix_wait_profile_t
-loom_amdgpu_wait_state_matrix_wait_profile(
-    const loom_amdgpu_wait_state_builder_t* builder) {
-  loom_amdgpu_matrix_wait_profile_t wait_profile =
-      LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950;
-  if (builder->processor_properties != NULL &&
-      !loom_amdgpu_matrix_wait_profile_from_feature_profile(
-          builder->processor_properties->features.matrix, &wait_profile)) {
-    return LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
-  }
-  return wait_profile;
-}
-
-static bool loom_amdgpu_wait_state_matrix_result_wait_cycles(
-    const loom_amdgpu_wait_state_builder_t* builder, uint16_t pass_count,
-    loom_amdgpu_wait_state_matrix_result_use_t use, uint16_t* out_cycle_count) {
-  *out_cycle_count = 0;
-  loom_amdgpu_matrix_wait_result_use_t table_use =
-      LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN;
-  if (!loom_amdgpu_wait_state_matrix_result_table_use(use, &table_use)) {
-    return false;
-  }
-  const loom_amdgpu_matrix_wait_profile_t wait_profile =
-      loom_amdgpu_wait_state_matrix_wait_profile(builder);
-  return loom_amdgpu_matrix_wait_result_cycle_count(wait_profile, pass_count,
-                                                    table_use, out_cycle_count);
-}
-
-static bool loom_amdgpu_wait_state_matrix_reads_valu_results(
-    const loom_amdgpu_matrix_contract_descriptor_t* contract) {
-  if ((uint32_t)contract->family >=
-      LOOM_AMDGPU_WAIT_STATE_MATRIX_FAMILY_USE_COUNT) {
-    return false;
-  }
-  return kMatrixFamilyUseRows[contract->family].reads_valu_results != 0;
-}
-
-static loom_amdgpu_wait_state_matrix_result_use_t
-loom_amdgpu_wait_state_matrix_operand_result_use(
-    const loom_amdgpu_matrix_contract_descriptor_t* contract,
-    uint16_t packet_operand_index) {
-  if ((uint32_t)contract->family >=
-          LOOM_AMDGPU_WAIT_STATE_MATRIX_FAMILY_USE_COUNT ||
-      packet_operand_index >=
-          LOOM_AMDGPU_WAIT_STATE_MATRIX_OPERAND_USE_CAPACITY) {
-    return LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN;
-  }
-  return kMatrixFamilyUseRows[contract->family]
-      .operand_uses[packet_operand_index];
-}
-
 static bool loom_amdgpu_wait_state_has_scheduling(
     const loom_amdgpu_wait_state_builder_t* builder,
     loom_amdgpu_processor_scheduling_bits_t bits) {
@@ -616,9 +484,7 @@ static bool loom_amdgpu_wait_state_has_scheduling(
 
 static bool loom_amdgpu_wait_state_target_has_delay_alu(
     const loom_amdgpu_wait_state_builder_t* builder) {
-  if (builder->processor_properties == NULL ||
-      builder->descriptor_set == NULL ||
-      !loom_amdgpu_wait_state_has_scheduling(
+  if (!loom_amdgpu_wait_state_has_scheduling(
           builder, LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU)) {
     return false;
   }
@@ -751,7 +617,7 @@ static void loom_amdgpu_wait_state_record_assignment(
     loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_allocation_assignment_t* assignment,
     loom_amdgpu_wait_state_reason_t reason, uint32_t producer_node,
-    uint16_t cycle_count, uint16_t matrix_pass_count,
+    uint16_t cycle_count, loom_amdgpu_matrix_instruction_t matrix,
     uint64_t producer_end_position) {
   if (!loom_amdgpu_wait_state_reason_is_tracked(reason)) {
     return;
@@ -777,7 +643,7 @@ static void loom_amdgpu_wait_state_record_assignment(
         .producer_location_base = assignment->location_base,
         .producer_location_count = assignment->location_count,
         .producer_end_position = producer_end_position,
-        .matrix_pass_count = matrix_pass_count,
+        .matrix = matrix,
         .required_cycle_count = cycle_count,
     };
   }
@@ -830,8 +696,8 @@ static void loom_amdgpu_wait_state_match_active_hazard(
     uint16_t matrix_pass_count = 0;
     if (hazard->reason == LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE &&
         matrix_result_use != LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN) {
-      matrix_wait_profile = loom_amdgpu_wait_state_matrix_wait_profile(builder);
-      matrix_pass_count = hazard->matrix_pass_count;
+      matrix_wait_profile = builder->matrix_wait_profile;
+      matrix_pass_count = hazard->matrix.pass_count;
     }
     *match = (loom_amdgpu_wait_state_match_t){
         .reason = hazard->reason,
@@ -850,6 +716,7 @@ static void loom_amdgpu_wait_state_match_assignment(
     const loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_allocation_assignment_t* assignment,
     loom_amdgpu_wait_state_reason_flags_t allowed_reasons,
+    loom_amdgpu_matrix_wait_result_use_t use,
     loom_amdgpu_wait_state_match_t* match) {
   if (!loom_amdgpu_wait_state_assignment_is_physical_vgpr(assignment)) {
     return;
@@ -877,13 +744,16 @@ static void loom_amdgpu_wait_state_match_assignment(
                                                  hazard->reason))) {
         continue;
       }
-      const loom_amdgpu_matrix_wait_result_use_t matrix_result_use =
-          hazard->reason == LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE
-              ? LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX
-              : LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN;
-      loom_amdgpu_wait_state_match_active_hazard(builder, hazard,
-                                                 hazard->required_cycle_count,
-                                                 matrix_result_use, match);
+      const bool matrix =
+          hazard->reason == LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE;
+      const uint16_t required_cycle_count =
+          matrix ? loom_amdgpu_matrix_wait_result_cycle_count(
+                       builder->matrix_wait_profile, hazard->matrix, use,
+                       (loom_amdgpu_matrix_instruction_t){0})
+                 : hazard->required_cycle_count;
+      loom_amdgpu_wait_state_match_active_hazard(
+          builder, hazard, required_cycle_count,
+          matrix ? use : LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN, match);
     }
   }
 }
@@ -929,7 +799,8 @@ static bool loom_amdgpu_wait_state_matrix_result_hazard_is_exact(
 static void loom_amdgpu_wait_state_match_matrix_result_assignment(
     const loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_allocation_assignment_t* assignment,
-    loom_amdgpu_wait_state_matrix_result_use_t use,
+    loom_amdgpu_matrix_wait_result_use_t use,
+    loom_amdgpu_matrix_instruction_t consumer,
     loom_amdgpu_wait_state_match_t* match) {
   if (!loom_amdgpu_wait_state_assignment_is_physical_vgpr(assignment)) {
     return;
@@ -950,28 +821,18 @@ static void loom_amdgpu_wait_state_match_matrix_result_assignment(
                           LOOM_AMDGPU_WAIT_STATE_VGPR_FLAG_VALID)) {
       continue;
     }
-    loom_amdgpu_wait_state_matrix_result_use_t actual_use = use;
-    if (use == LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC) {
-      actual_use =
-          loom_amdgpu_wait_state_matrix_result_hazard_is_exact(hazard,
-                                                               assignment)
-              ? LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_EXACT
-              : LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_OVERLAP;
+    loom_amdgpu_matrix_wait_result_use_t actual_use = use;
+    if (use == LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT) {
+      actual_use = loom_amdgpu_wait_state_matrix_result_hazard_is_exact(
+                       hazard, assignment)
+                       ? LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT
+                       : LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP;
     }
-    uint16_t required_cycle_count = 0;
-    if (!loom_amdgpu_wait_state_matrix_result_wait_cycles(
-            builder, hazard->matrix_pass_count, actual_use,
-            &required_cycle_count)) {
-      continue;
-    }
-    loom_amdgpu_matrix_wait_result_use_t table_use =
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN;
-    if (!loom_amdgpu_wait_state_matrix_result_table_use(actual_use,
-                                                        &table_use)) {
-      continue;
-    }
+    const uint16_t required_cycle_count =
+        loom_amdgpu_matrix_wait_result_cycle_count(
+            builder->matrix_wait_profile, hazard->matrix, actual_use, consumer);
     loom_amdgpu_wait_state_match_active_hazard(
-        builder, hazard, required_cycle_count, table_use, match);
+        builder, hazard, required_cycle_count, actual_use, match);
   }
 }
 
@@ -1381,12 +1242,13 @@ static void loom_amdgpu_wait_state_match_descriptor_operands(
     const loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_packet_view_t* packet,
     loom_amdgpu_wait_state_reason_flags_t allowed_reasons,
+    loom_amdgpu_matrix_wait_result_use_t use,
     loom_amdgpu_wait_state_match_t* match) {
   for (uint16_t i = 0; i < packet->node->operand_count; ++i) {
     loom_amdgpu_wait_state_match_assignment(
         builder,
         loom_low_packet_operand_assignment(builder->allocation, packet, i),
-        allowed_reasons, match);
+        allowed_reasons, use, match);
   }
 }
 
@@ -1398,8 +1260,9 @@ static void loom_amdgpu_wait_state_match_result_writes(
   for (uint16_t i = 0; i < packet->node->result_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         loom_low_packet_result_assignment(builder->allocation, packet, i);
-    loom_amdgpu_wait_state_match_assignment(builder, assignment,
-                                            allowed_reasons, match);
+    loom_amdgpu_wait_state_match_assignment(
+        builder, assignment, allowed_reasons,
+        LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_WRITE, match);
   }
 }
 
@@ -1420,17 +1283,20 @@ static void loom_amdgpu_wait_state_match_matrix_descriptor_operands(
     const loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_packet_view_t* packet,
     const loom_amdgpu_matrix_contract_descriptor_t* contract,
+    loom_amdgpu_matrix_instruction_t consumer,
     loom_amdgpu_wait_state_match_t* match) {
+  const uint16_t accumulator_operand =
+      contract->family == LOOM_AMDGPU_MATRIX_FAMILY_SMFMAC ? 0 : 2;
   for (uint16_t i = 0; i < packet->node->operand_count; ++i) {
-    loom_amdgpu_wait_state_matrix_result_use_t use =
-        loom_amdgpu_wait_state_matrix_operand_result_use(contract, i);
-    if (use == LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN) {
-      continue;
-    }
+    // Scale and sparse-index operands use the same input window as SrcA/SrcB.
+    const loom_amdgpu_matrix_wait_result_use_t use =
+        i == accumulator_operand
+            ? LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT
+            : LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB;
     loom_amdgpu_wait_state_match_matrix_result_assignment(
         builder,
         loom_low_packet_operand_assignment(builder->allocation, packet, i), use,
-        match);
+        consumer, match);
   }
 }
 
@@ -1448,15 +1314,15 @@ static void loom_amdgpu_wait_state_record_results(
     loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_packet_view_t* packet,
     loom_amdgpu_wait_state_reason_t reason, uint16_t cycle_count,
-    uint16_t matrix_pass_count, uint64_t instruction_count) {
+    loom_amdgpu_matrix_instruction_t matrix, uint64_t instruction_count) {
   const uint64_t producer_end_position =
       builder->current_position + instruction_count;
   for (uint16_t i = 0; i < packet->node->result_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         loom_low_packet_result_assignment(builder->allocation, packet, i);
-    loom_amdgpu_wait_state_record_assignment(
-        builder, assignment, reason, packet->node_index, cycle_count,
-        matrix_pass_count, producer_end_position);
+    loom_amdgpu_wait_state_record_assignment(builder, assignment, reason,
+                                             packet->node_index, cycle_count,
+                                             matrix, producer_end_position);
   }
 }
 
@@ -1486,33 +1352,34 @@ static void loom_amdgpu_wait_state_record_vector_alu_results(
   loom_amdgpu_wait_state_clear_results(builder, packet);
   loom_amdgpu_wait_state_record_results(
       builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE,
-      LOOM_AMDGPU_WAIT_STATE_VALU_TO_MATRIX_CYCLES, 0, info->instruction_count);
+      LOOM_AMDGPU_WAIT_STATE_VALU_TO_MATRIX_CYCLES,
+      (loom_amdgpu_matrix_instruction_t){0}, info->instruction_count);
   if (!builder->has_delay_alu) {
     loom_amdgpu_wait_state_record_results(
         builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_LANE_PERMUTE_VGPR_READ,
-        LOOM_AMDGPU_WAIT_STATE_LANE_PERMUTE_VGPR_READ_CYCLES, 0,
-        info->instruction_count);
+        LOOM_AMDGPU_WAIT_STATE_LANE_PERMUTE_VGPR_READ_CYCLES,
+        (loom_amdgpu_matrix_instruction_t){0}, info->instruction_count);
   }
   if (processor_has_valu_sgpr_read_hazard) {
     loom_amdgpu_wait_state_record_results(
         builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ,
-        LOOM_AMDGPU_WAIT_STATE_READFIRSTLANE_VGPR_READ_CYCLES, 0,
-        info->instruction_count);
+        LOOM_AMDGPU_WAIT_STATE_READFIRSTLANE_VGPR_READ_CYCLES,
+        (loom_amdgpu_matrix_instruction_t){0}, info->instruction_count);
   }
   if (iree_any_bit_set(info->flags,
                        LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_TRANS_PRODUCER)) {
     loom_amdgpu_wait_state_record_results(
         builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE,
-        LOOM_AMDGPU_WAIT_STATE_TRANS_RESULT_USE_CYCLES, 0,
-        info->instruction_count);
+        LOOM_AMDGPU_WAIT_STATE_TRANS_RESULT_USE_CYCLES,
+        (loom_amdgpu_matrix_instruction_t){0}, info->instruction_count);
   }
   if (iree_any_bit_set(
           info->flags,
           LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_DST_SEL_FORWARDING_PRODUCER)) {
     loom_amdgpu_wait_state_record_results(
         builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_DST_SEL_FORWARDING_USE,
-        LOOM_AMDGPU_WAIT_STATE_DST_SEL_FORWARDING_CYCLES, 0,
-        info->instruction_count);
+        LOOM_AMDGPU_WAIT_STATE_DST_SEL_FORWARDING_CYCLES,
+        (loom_amdgpu_matrix_instruction_t){0}, info->instruction_count);
   }
   if (iree_any_bit_set(
           info->flags,
@@ -1569,25 +1436,26 @@ static iree_status_t loom_amdgpu_wait_state_packet_analyze(
     out_info->flags |= LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_USES_VECTOR_MEMORY;
   }
 
+  const loom_amdgpu_descriptor_ref_t descriptor_ref =
+      loom_amdgpu_descriptor_ref_for_descriptor(descriptor_set, descriptor);
   out_info->matrix_contract =
-      loom_amdgpu_wait_state_contract_for_descriptor(builder, descriptor);
+      loom_amdgpu_matrix_contract_wait_state_descriptor_for_low_descriptor_ref(
+          descriptor_ref);
   if (out_info->matrix_contract != NULL) {
-    out_info->matrix_pass_count =
-        loom_amdgpu_descriptor_matrix_pass_count(descriptor_traits);
-    if (out_info->matrix_pass_count != 0) {
+    out_info->matrix = (loom_amdgpu_matrix_instruction_t){
+        .descriptor_ref = descriptor_ref,
+        .pass_count = (uint8_t)loom_amdgpu_descriptor_matrix_pass_count(
+            descriptor_traits),
+        .pipeline = iree_any_bit_set(descriptor_traits,
+                                     LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_DGEMM)
+                        ? LOOM_AMDGPU_MATRIX_PIPELINE_DGEMM
+                    : iree_any_bit_set(descriptor_traits,
+                                       LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_XDL)
+                        ? LOOM_AMDGPU_MATRIX_PIPELINE_XDL
+                        : LOOM_AMDGPU_MATRIX_PIPELINE_SGEMM,
+    };
+    if (out_info->matrix.pass_count != 0) {
       out_info->flags |= LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_MATRIX;
-      if (!loom_amdgpu_wait_state_matrix_result_wait_cycles(
-              builder, out_info->matrix_pass_count,
-              LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_NON_MATRIX,
-              &out_info->matrix_wait_cycles)) {
-        IREE_ASSERT_UNREACHABLE(
-            "generated AMDGPU matrix wait-state table is missing a result-use "
-            "row");
-      }
-    }
-    if (loom_amdgpu_wait_state_matrix_reads_valu_results(
-            out_info->matrix_contract)) {
-      out_info->flags |= LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_MATRIX_READS_VALU;
     }
   }
 
@@ -1674,8 +1542,9 @@ static void loom_amdgpu_wait_state_match_structural_operands(
                         LOOM_AMDGPU_STRUCTURAL_PACKET_FLAG_MATERIALIZES)) {
     return;
   }
-  loom_amdgpu_wait_state_match_descriptor_operands(builder, packet,
-                                                   allowed_reasons, match);
+  loom_amdgpu_wait_state_match_descriptor_operands(
+      builder, packet, allowed_reasons,
+      LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_VALU_READ, match);
 }
 
 static void loom_amdgpu_wait_state_match_packet_hazards(
@@ -1689,12 +1558,12 @@ static void loom_amdgpu_wait_state_match_packet_hazards(
   const bool processor_has_delay_alu = builder->has_delay_alu;
 
   if (iree_any_bit_set(info->flags,
-                       LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_MATRIX_READS_VALU)) {
+                       LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_MATRIX)) {
     loom_amdgpu_wait_state_match_matrix_descriptor_operands(
-        builder, packet, info->matrix_contract, match);
+        builder, packet, info->matrix_contract, info->matrix, match);
     loom_amdgpu_wait_state_match_descriptor_operands(
         builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_TO_MATRIX_USE,
-        match);
+        LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_VALU_READ, match);
   } else if (iree_any_bit_set(info->flags,
                               LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_DESCRIPTOR)) {
     loom_amdgpu_wait_state_reason_flags_t allowed_reasons =
@@ -1724,8 +1593,13 @@ static void loom_amdgpu_wait_state_match_packet_hazards(
       allowed_reasons |=
           LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_DST_SEL_FORWARDING_USE;
     }
-    loom_amdgpu_wait_state_match_descriptor_operands(builder, packet,
-                                                     allowed_reasons, match);
+    const loom_amdgpu_matrix_wait_result_use_t use =
+        iree_any_bit_set(info->descriptor_traits,
+                         LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_MEMORY_CONSUMER)
+            ? LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MEMORY_READ
+            : LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_VALU_READ;
+    loom_amdgpu_wait_state_match_descriptor_operands(
+        builder, packet, allowed_reasons, use, match);
     if (iree_any_bit_set(
             info->flags,
             LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_VALU_SGPR_READ_CONSUMER)) {
@@ -1854,9 +1728,8 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
   if (iree_any_bit_set(info.flags, LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_MATRIX)) {
     loom_amdgpu_wait_state_clear_results(builder, packet);
     loom_amdgpu_wait_state_record_results(
-        builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE,
-        info.matrix_wait_cycles, info.matrix_pass_count,
-        info.instruction_count);
+        builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE, 0,
+        info.matrix, info.instruction_count);
   } else if (iree_any_bit_set(
                  info.flags,
                  LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_USES_VECTOR_ALU)) {
@@ -1872,21 +1745,21 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
       loom_amdgpu_wait_state_clear_results(builder, packet);
       loom_amdgpu_wait_state_record_results(
           builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE,
-          LOOM_AMDGPU_WAIT_STATE_VALU_TO_MATRIX_CYCLES, 0,
-          info.instruction_count);
+          LOOM_AMDGPU_WAIT_STATE_VALU_TO_MATRIX_CYCLES,
+          (loom_amdgpu_matrix_instruction_t){0}, info.instruction_count);
       if (!processor_has_delay_alu) {
         loom_amdgpu_wait_state_record_results(
             builder, packet,
             LOOM_AMDGPU_WAIT_STATE_REASON_LANE_PERMUTE_VGPR_READ,
-            LOOM_AMDGPU_WAIT_STATE_LANE_PERMUTE_VGPR_READ_CYCLES, 0,
-            info.instruction_count);
+            LOOM_AMDGPU_WAIT_STATE_LANE_PERMUTE_VGPR_READ_CYCLES,
+            (loom_amdgpu_matrix_instruction_t){0}, info.instruction_count);
       }
       if (processor_has_valu_sgpr_read_hazard) {
         loom_amdgpu_wait_state_record_results(
             builder, packet,
             LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ,
-            LOOM_AMDGPU_WAIT_STATE_READFIRSTLANE_VGPR_READ_CYCLES, 0,
-            info.instruction_count);
+            LOOM_AMDGPU_WAIT_STATE_READFIRSTLANE_VGPR_READ_CYCLES,
+            (loom_amdgpu_matrix_instruction_t){0}, info.instruction_count);
       }
     } else if (info.instruction_count != 0) {
       loom_amdgpu_wait_state_clear_results(builder, packet);
@@ -2197,9 +2070,7 @@ static iree_status_t loom_amdgpu_wait_state_build_hazard_plan(
 static iree_status_t loom_amdgpu_wait_state_plan_build_with_scratch(
     loom_amdgpu_wait_state_builder_t* builder) {
   builder->processor_scheduling =
-      builder->processor_properties != NULL
-          ? builder->processor_properties->features.scheduling
-          : 0;
+      builder->processor_properties->features.scheduling;
   builder->has_delay_alu = loom_amdgpu_wait_state_target_has_delay_alu(builder);
   if (loom_amdgpu_wait_state_has_scheduling(
           builder, LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_MASK_WRITE_DEPCTR) &&
@@ -2347,6 +2218,9 @@ iree_status_t loom_amdgpu_wait_state_plan_build(
       .schedule = schedule,
       .allocation = allocation,
       .processor_properties = processor_properties,
+      .matrix_wait_profile =
+          loom_amdgpu_matrix_wait_profile_from_feature_profile(
+              processor_properties->features.matrix),
       .wait_plan = wait_packets->wait_plan,
       .wait_packets = wait_packets,
       .vopd_packets = has_vopd_pairs ? vopd_plan->packets : NULL,

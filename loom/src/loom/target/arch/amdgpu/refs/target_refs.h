@@ -60,6 +60,12 @@ typedef enum loom_amdgpu_descriptor_trait_bit_e {
   // Wide shift operand zero needs its next VGPR allocated when the count
   // occupies the last register of an eight-register allocation block.
   LOOM_AMDGPU_DESCRIPTOR_TRAIT_SHIFT64_ALLOCATION = 1u << 16,
+  // MFMA executes on the F64 matrix pipeline.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_DGEMM = 1u << 22,
+  // MFMA executes on the narrow/integer/XF32 matrix pipeline.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_XDL = 1u << 23,
+  // VMEM, DS, or export reads use the matrix-to-memory forwarding window.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_MEMORY_CONSUMER = 1u << 24,
 } loom_amdgpu_descriptor_trait_bit_t;
 typedef uint32_t loom_amdgpu_descriptor_traits_t;
 

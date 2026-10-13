@@ -6,302 +6,169 @@
 
 #include "loom/target/arch/amdgpu/planning/matrix_wait_states.h"
 
-#define LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(profile_, use_, pass_, cycles_) \
-  {                                                                        \
-      .profile = profile_,                                                 \
-      .use = use_,                                                         \
-      .pass_count = pass_,                                                 \
-      .cycle_count = cycles_,                                              \
-  }
+#include "iree/base/internal/math.h"
 
-static const loom_amdgpu_matrix_wait_result_row_t
-    kAmdgpuMatrixWaitResultRows[] = {
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 2, 5),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 4, 7),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 8, 11),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 16, 19),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 32, 35),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 2, 2),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 4, 0),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 8, 0),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 16, 0),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 32, 0),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 2, 3),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 4, 5),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 8, 9),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 16, 17),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 32, 33),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 2, 5),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 4, 7),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 8, 11),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 16, 19),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 32, 35),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 2, 5),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 4, 8),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 8, 12),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 16, 20),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX, 32, 36),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 2, 2),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 4, 0),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 8, 0),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 16, 0),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT, 32, 0),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 2, 3),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 4, 5),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 8, 9),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 16, 17),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP, 32, 33),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 2, 5),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 4, 8),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 8, 12),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 16, 20),
-        LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-            LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB, 32, 36),
+// Each row covers one producer pipeline and pass count. Indexed bytes keep
+// the full consumer matrix smaller than profile/use/pass records.
+typedef struct loom_amdgpu_matrix_result_window_t {
+  // VALU read, memory/export read, and nonmatrix overwrite separations.
+  uint8_t ordinary[3];
+  // Partial SrcC overlap separation, indexed by consumer pipeline.
+  uint8_t accumulator[LOOM_AMDGPU_MATRIX_PIPELINE_COUNT_];
+} loom_amdgpu_matrix_result_window_t;
+
+// Pass columns are 2, 4, 8, and 16. Unused DGEMM two-pass cells remain zero.
+// CDNA2 narrow matrix instructions share the SGEMM separation contract.
+static const loom_amdgpu_matrix_result_window_t
+    kResultWindows[LOOM_AMDGPU_MATRIX_WAIT_PROFILE_COUNT_ - 1]
+                  [LOOM_AMDGPU_MATRIX_PIPELINE_COUNT_][4] =
+                      {
+                          [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX90A - 1] =
+                              {
+                                  [LOOM_AMDGPU_MATRIX_PIPELINE_SGEMM] =
+                                      {{{5, 5, 5}, {2, 2, 3}},
+                                       {{7, 7, 7}, {4, 4, 5}},
+                                       {{11, 11, 11}, {8, 8, 9}},
+                                       {{19, 19, 19}, {16, 16, 17}}},
+                                  [LOOM_AMDGPU_MATRIX_PIPELINE_XDL] =
+                                      {{{5, 5, 5}, {2, 2, 3}},
+                                       {{7, 7, 7}, {4, 4, 5}},
+                                       {{11, 11, 11}, {8, 8, 9}},
+                                       {{19, 19, 19}, {16, 16, 17}}},
+                                  [LOOM_AMDGPU_MATRIX_PIPELINE_DGEMM] =
+                                      {{{0, 0, 0}, {0, 0, 0}},
+                                       {{6, 9, 6}, {0, 0, 4}},
+                                       {{11, 18, 11}, {0, 0, 9}},
+                                       {{11, 18, 11}, {0, 0, 9}}},
+                              },
+                          [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX940 - 1] =
+                              {
+                                  [LOOM_AMDGPU_MATRIX_PIPELINE_SGEMM] =
+                                      {{{4, 4, 4}, {2, 0, 2}},
+                                       {{6, 6, 6}, {4, 0, 4}},
+                                       {{10, 10, 10}, {8, 0, 8}},
+                                       {{18, 18, 18}, {16, 0, 16}}},
+                                  [LOOM_AMDGPU_MATRIX_PIPELINE_XDL] =
+                                      {{{5, 5, 5}, {3, 3, 3}},
+                                       {{7, 7, 7}, {5, 5, 5}},
+                                       {{11, 11, 11}, {9, 9, 9}},
+                                       {{19, 19, 19}, {17, 17, 17}}},
+                                  [LOOM_AMDGPU_MATRIX_PIPELINE_DGEMM] =
+                                      {{{0, 0, 0}, {0, 0, 0}},
+                                       {{6, 9, 6}, {4, 0, 4}},
+                                       {{11, 18, 11}, {9, 0, 9}},
+                                       {{11, 18, 11}, {9, 0, 9}}},
+                              },
+                          [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950 - 1] =
+                              {
+                                  [LOOM_AMDGPU_MATRIX_PIPELINE_SGEMM] =
+                                      {{{4, 4, 4}, {2, 0, 2}},
+                                       {{6, 6, 6}, {4, 0, 4}},
+                                       {{10, 10, 10}, {8, 0, 8}},
+                                       {{18, 18, 18}, {16, 0, 16}}},
+                                  [LOOM_AMDGPU_MATRIX_PIPELINE_XDL] =
+                                      {{{5, 5, 5}, {3, 4, 3}},
+                                       {{8, 8, 8}, {6, 6, 6}},
+                                       {{12, 12, 12}, {10, 10, 10}},
+                                       {{20, 20, 20}, {18, 18, 18}}},
+                                  [LOOM_AMDGPU_MATRIX_PIPELINE_DGEMM] =
+                                      {{{0, 0, 0}, {0, 0, 0}},
+                                       {{6, 9, 6}, {4, 0, 4}},
+                                       {{19, 18, 11}, {17, 0, 17}},
+                                       {{19, 18, 11}, {17, 0, 17}}},
+                              },
 };
 
-#undef LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW
-
-enum {
-  LOOM_AMDGPU_MATRIX_WAIT_PASS_2_INDEX = 0,
-  LOOM_AMDGPU_MATRIX_WAIT_PASS_4_INDEX,
-  LOOM_AMDGPU_MATRIX_WAIT_PASS_8_INDEX,
-  LOOM_AMDGPU_MATRIX_WAIT_PASS_16_INDEX,
-  LOOM_AMDGPU_MATRIX_WAIT_PASS_32_INDEX,
-  LOOM_AMDGPU_MATRIX_WAIT_PASS_COUNT_,
+static const uint8_t kWaitProfiles[] = {
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_NONE] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX90A,
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX940,
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX9_4_GENERIC] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+    [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12_5_GENERIC] =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
 };
 
-static_assert(IREE_ARRAYSIZE(kAmdgpuMatrixWaitResultRows) ==
-                  (LOOM_AMDGPU_MATRIX_WAIT_PROFILE_COUNT_ - 1u) *
-                      (LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_COUNT_ - 1u) *
-                      LOOM_AMDGPU_MATRIX_WAIT_PASS_COUNT_,
-              "matrix wait rows must cover each concrete profile/use/pass");
-
-static const iree_string_view_t kAmdgpuMatrixWaitProfileNames[] = {
-    [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN] = IREE_SVL("unknown"),
-    [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950] =
-        IREE_SVL("mfma_pre_gfx950"),
-    [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950] = IREE_SVL("mfma_gfx950"),
+static const iree_string_view_t kProfileNames[] = {
+    IREE_SVL("unknown"),
+    IREE_SVL("mfma_gfx90a"),
+    IREE_SVL("mfma_gfx940"),
+    IREE_SVL("mfma_gfx950"),
 };
 
-static const iree_string_view_t kAmdgpuMatrixWaitResultUseNames[] = {
-    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN] = IREE_SVL("unknown"),
-    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX] = IREE_SVL("non_matrix"),
-    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT] =
-        IREE_SVL("matrix_srcc_exact"),
-    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP] =
-        IREE_SVL("matrix_srcc_overlap"),
-    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB] =
-        IREE_SVL("matrix_src_ab"),
-};
-
-static const loom_amdgpu_matrix_wait_profile_t
-    kAmdgpuMatrixWaitProfilesByFeatureProfile[] = {
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_NONE] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX9_4_GENERIC] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
-        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12_5_GENERIC] =
-            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+static const iree_string_view_t kResultUseNames[] = {
+    IREE_SVL("unknown"),
+    IREE_SVL("valu_read"),
+    IREE_SVL("memory_read"),
+    IREE_SVL("write"),
+    IREE_SVL("matrix_src_ab"),
+    IREE_SVL("matrix_srcc_exact"),
+    IREE_SVL("matrix_srcc_overlap"),
 };
 
 iree_string_view_t loom_amdgpu_matrix_wait_profile_name(
     loom_amdgpu_matrix_wait_profile_t profile) {
-  if ((iree_host_size_t)profile >=
-      IREE_ARRAYSIZE(kAmdgpuMatrixWaitProfileNames)) {
-    return kAmdgpuMatrixWaitProfileNames
-        [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN];
-  }
-  return kAmdgpuMatrixWaitProfileNames[profile];
+  return kProfileNames[profile];
 }
 
 iree_string_view_t loom_amdgpu_matrix_wait_result_use_name(
     loom_amdgpu_matrix_wait_result_use_t use) {
-  if ((iree_host_size_t)use >=
-      IREE_ARRAYSIZE(kAmdgpuMatrixWaitResultUseNames)) {
-    return kAmdgpuMatrixWaitResultUseNames
-        [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN];
-  }
-  return kAmdgpuMatrixWaitResultUseNames[use];
+  return kResultUseNames[use];
 }
 
-bool loom_amdgpu_matrix_wait_profile_from_feature_profile(
-    loom_amdgpu_matrix_feature_profile_t feature_profile,
-    loom_amdgpu_matrix_wait_profile_t* out_profile) {
-  loom_amdgpu_matrix_wait_profile_t profile =
-      LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
-  if ((iree_host_size_t)feature_profile <
-      IREE_ARRAYSIZE(kAmdgpuMatrixWaitProfilesByFeatureProfile)) {
-    profile = kAmdgpuMatrixWaitProfilesByFeatureProfile[feature_profile];
-  }
-  *out_profile = profile;
-  return profile != LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
+loom_amdgpu_matrix_wait_profile_t
+loom_amdgpu_matrix_wait_profile_from_feature_profile(
+    loom_amdgpu_matrix_feature_profile_t feature_profile) {
+  return (loom_amdgpu_matrix_wait_profile_t)kWaitProfiles[feature_profile];
 }
 
-iree_host_size_t loom_amdgpu_matrix_wait_result_row_count(void) {
-  return IREE_ARRAYSIZE(kAmdgpuMatrixWaitResultRows);
-}
-
-const loom_amdgpu_matrix_wait_result_row_t*
-loom_amdgpu_matrix_wait_result_row_at(iree_host_size_t index) {
-  if (index >= IREE_ARRAYSIZE(kAmdgpuMatrixWaitResultRows)) {
-    return NULL;
+uint16_t loom_amdgpu_matrix_wait_result_cycle_count(
+    loom_amdgpu_matrix_wait_profile_t profile,
+    loom_amdgpu_matrix_instruction_t producer,
+    loom_amdgpu_matrix_wait_result_use_t use,
+    loom_amdgpu_matrix_instruction_t consumer) {
+  const uint32_t pass_index =
+      iree_math_count_trailing_zeros_u32(producer.pass_count) - 1;
+  const loom_amdgpu_matrix_result_window_t* window =
+      &kResultWindows[profile - 1][producer.pipeline][pass_index];
+  if (use <= LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_WRITE) {
+    return window->ordinary[use - 1];
   }
-  return &kAmdgpuMatrixWaitResultRows[index];
-}
-
-static bool loom_amdgpu_matrix_wait_pass_index(
-    uint16_t pass_count, iree_host_size_t* out_pass_index) {
-  switch (pass_count) {
-    case 2:
-      *out_pass_index = LOOM_AMDGPU_MATRIX_WAIT_PASS_2_INDEX;
-      return true;
-    case 4:
-      *out_pass_index = LOOM_AMDGPU_MATRIX_WAIT_PASS_4_INDEX;
-      return true;
-    case 8:
-      *out_pass_index = LOOM_AMDGPU_MATRIX_WAIT_PASS_8_INDEX;
-      return true;
-    case 16:
-      *out_pass_index = LOOM_AMDGPU_MATRIX_WAIT_PASS_16_INDEX;
-      return true;
-    case 32:
-      *out_pass_index = LOOM_AMDGPU_MATRIX_WAIT_PASS_32_INDEX;
-      return true;
-    default:
-      return false;
+  if (use == LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB) {
+    return window->ordinary[0];
   }
-}
-
-const loom_amdgpu_matrix_wait_result_row_t* loom_amdgpu_matrix_wait_result_find(
-    loom_amdgpu_matrix_wait_profile_t profile, uint16_t pass_count,
-    loom_amdgpu_matrix_wait_result_use_t use) {
-  if (profile == LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN ||
-      profile >= LOOM_AMDGPU_MATRIX_WAIT_PROFILE_COUNT_ ||
-      use == LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN ||
-      use >= LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_COUNT_) {
-    return NULL;
+  const uint16_t overlap = window->accumulator[consumer.pipeline];
+  if (use == LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP) {
+    return overlap;
   }
-  iree_host_size_t pass_index = 0;
-  if (!loom_amdgpu_matrix_wait_pass_index(pass_count, &pass_index)) {
-    return NULL;
+  uint16_t exact = 0;
+  if (producer.pipeline == LOOM_AMDGPU_MATRIX_PIPELINE_DGEMM &&
+      consumer.pipeline == LOOM_AMDGPU_MATRIX_PIPELINE_DGEMM &&
+      producer.pass_count == 4 && consumer.pass_count == 4) {
+    exact = 4;
+  } else if (profile != LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX90A &&
+             producer.pass_count == 2) {
+    exact = 2;
   }
-  const iree_host_size_t row_index =
-      (((iree_host_size_t)profile - 1u) *
-           (LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_COUNT_ - 1u) +
-       ((iree_host_size_t)use - 1u)) *
-          LOOM_AMDGPU_MATRIX_WAIT_PASS_COUNT_ +
-      pass_index;
-  IREE_ASSERT_LT(row_index, IREE_ARRAYSIZE(kAmdgpuMatrixWaitResultRows));
-  const loom_amdgpu_matrix_wait_result_row_t* row =
-      &kAmdgpuMatrixWaitResultRows[row_index];
-  IREE_ASSERT_EQ(row->profile, profile);
-  IREE_ASSERT_EQ(row->use, use);
-  IREE_ASSERT_EQ(row->pass_count, pass_count);
-  return row;
-}
-
-bool loom_amdgpu_matrix_wait_result_cycle_count(
-    loom_amdgpu_matrix_wait_profile_t profile, uint16_t pass_count,
-    loom_amdgpu_matrix_wait_result_use_t use, uint16_t* out_cycle_count) {
-  *out_cycle_count = 0;
-  const loom_amdgpu_matrix_wait_result_row_t* row =
-      loom_amdgpu_matrix_wait_result_find(profile, pass_count, use);
-  if (row == NULL) {
-    return false;
+  // Later pipelines forward a full accumulator only within one instruction
+  // form, even when a different matrix instruction uses exactly the same
+  // registers.
+  if (profile != LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX90A &&
+      producer.descriptor_ref != consumer.descriptor_ref && overlap > exact) {
+    exact = overlap;
   }
-  *out_cycle_count = row->cycle_count;
-  return true;
+  return exact;
 }

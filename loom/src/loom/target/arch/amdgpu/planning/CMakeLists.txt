@@ -119,6 +119,7 @@ loom_cc_library(
     "matrix_wait_states.c"
   DEPS
     iree::base
+    iree::base::internal
     loom::target::arch::amdgpu::target_info_defs
   PUBLIC
 )
@@ -134,6 +135,7 @@ loom_cc_test(
     ::matrix_wait_states
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::target::arch::amdgpu::target_info_defs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )

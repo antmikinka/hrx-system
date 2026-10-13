@@ -166,6 +166,10 @@ _IMAGE_MEMORY_ENCODING_FORMAT_IDS = frozenset(
     )
 )
 
+_MATRIX_MEMORY_ENCODING_FORMAT_IDS = (
+    _VECTOR_MEMORY_ENCODING_FORMAT_IDS | _IMAGE_MEMORY_ENCODING_FORMAT_IDS | frozenset(AMDGPU_ENCODING_FORMAT_IDS[name] for name in ("ENC_DS", "ENC_VDS", "ENC_EXP", "ENC_VEXPORT"))
+)
+
 _TRANSCENDENTAL_DESCRIPTOR_KEYS = frozenset(
     (
         "amdgpu.v_exp_f32",
@@ -555,8 +559,17 @@ def _descriptor_trait_names(
             if timing is None or timing.execution_passes not in (2, 4, 8, 16):
                 raise ValueError(f"AMDGPU matrix descriptor '{descriptor.key}' has no qualified execution pass count in '{context.descriptor_set.key}'")
             trait_names.append(f"({timing.execution_passes}u << LOOM_AMDGPU_DESCRIPTOR_MATRIX_PASSES_SHIFT)")
+            semantic = descriptor.semantic_tag or ""
+            if not semantic.startswith(("matrix.mfma.", "matrix.smfmac.")):
+                raise ValueError(f"MFMA pipeline classification requires matrix semantics: {descriptor.key}")
+            if semantic.startswith("matrix.mfma.f64."):
+                trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_DGEMM")
+            elif not semantic.endswith(".f32"):
+                trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_XDL")
     if descriptor.encoding_format_id in _VECTOR_MEMORY_ENCODING_FORMAT_IDS:
         trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_MEMORY")
+    if descriptor.encoding_format_id in _MATRIX_MEMORY_ENCODING_FORMAT_IDS:
+        trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX_MEMORY_CONSUMER")
     if descriptor.key in _TRANSCENDENTAL_DESCRIPTOR_KEYS:
         trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_TRANSCENDENTAL")
     if descriptor.encoding_format_id in AMDGPU_DPP_ENCODING_FORMAT_IDS:

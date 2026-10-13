@@ -162,8 +162,9 @@ iree_string_view_t loom_amdgpu_wait_state_action_name(
 // allocated, and VOPD-packetized low function. Elided authored waits in
 // |wait_packets->wait_plan| provide no instruction-slot progress. Concrete
 // wait insertions supply native progress. |vopd_plan| may be NULL
-// when the target has no native packetization. The caller must keep the input
-// plans immutable and |arena| alive for as long as |out_plan| is used.
+// when the target has no native packetization. Processor properties come from
+// the resolved target record and must be present. The caller must keep the
+// input plans immutable and |arena| alive for as long as |out_plan| is used.
 iree_status_t loom_amdgpu_wait_state_plan_build(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,

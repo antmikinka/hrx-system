@@ -3400,7 +3400,7 @@ low.func.def target<amdgpu.cdna3.core>(@gfx942_target) @gfx942_mfma_f32_operand_
 
 // ----
   v_mfma_f32_16x16x4_f32 v[4:7], v0, v1, v[4:7]
-  s_nop 10
+  s_nop 9
   global_store_dword v2, v4, s[0:1] offset:0
   s_waitcnt vmcnt(0) lgkmcnt(15)
   s_endpgm

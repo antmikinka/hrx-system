@@ -124,6 +124,7 @@ loom_cc_library(
     deps = [
         "//loom/src/loom/target/arch/amdgpu:target_info_defs",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
     ],
 )
 
@@ -132,6 +133,7 @@ loom_cc_test(
     srcs = ["matrix_wait_states_test.cc"],
     deps = [
         ":matrix_wait_states",
+        "//loom/src/loom/target/arch/amdgpu:target_info_defs",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
