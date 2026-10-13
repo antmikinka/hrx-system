@@ -1382,7 +1382,7 @@ iree_status_t loom_amdgpu_lower_vector_packed_ternary(
     low_sources[i] = loom_low_lower_lookup_value(context, plan->sources[i]);
   }
   IREE_RETURN_IF_ERROR(loom_amdgpu_legalize_vop3_scalar_sources(
-      context, source_op, low_sources));
+      context, source_op, low_sources, IREE_ARRAYSIZE(low_sources)));
 
   const loom_type_t packet_type = loom_low_register_type(
       loom_low_lower_context_descriptor_set(context)->stable_id,

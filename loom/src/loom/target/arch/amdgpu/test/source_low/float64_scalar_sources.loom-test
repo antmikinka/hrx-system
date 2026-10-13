@@ -1,0 +1,154 @@
+// RUN: emit source-low target=amdgpu:gfx90a output=low
+
+// Integer carriers preserve uniform storage through the floating-point bitcast.
+func.def @uniform_binary(%lhs_bits: i64, %rhs_bits: i64) -> (f64, f64, f64) {
+  %lhs = scalar.bitcast %lhs_bits : i64 to f64
+  %rhs = scalar.bitcast %rhs_bits : i64 to f64
+  %sum = scalar.addf %lhs, %rhs : f64
+  %difference = scalar.subf %lhs, %rhs : f64
+  %product = scalar.mulf %lhs, %rhs : f64
+  func.return %sum, %difference, %product : f64, f64, f64
+}
+
+// ----
+low.func.def target<amdgpu.cdna2.core> abi(hal_kernel) @uniform_binary(%lhs: reg<amdgpu.sgpr x2>, %rhs: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+  %15 = slice %rhs[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %16 = v_mov_b32_copy %15
+  %17 = slice %rhs[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %18 = v_mov_b32_copy %17
+  %19 = concat(%16, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %sum = v_add_f64 %lhs, %19
+  %25 = concat(%16, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %difference = v_sub_f64 %lhs, %25
+  %31 = concat(%16, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %product = v_mul_f64 %lhs, %31
+  return %sum, %difference, %product
+}
+
+// ====
+
+// RUN: emit source-low target=amdgpu:gfx90a output=low
+
+// Either operand may retain the single scalar-source slot without commuting.
+func.def @mixed_binary(%varying: f64, %uniform_bits: i64) -> (f64, f64, f64, f64) {
+  %uniform = scalar.bitcast %uniform_bits : i64 to f64
+  %sum = scalar.addf %varying, %uniform : f64
+  %left_difference = scalar.subf %varying, %uniform : f64
+  %right_difference = scalar.subf %uniform, %varying : f64
+  %product = scalar.mulf %varying, %uniform : f64
+  func.return %sum, %left_difference, %right_difference, %product : f64, f64, f64, f64
+}
+
+// ----
+low.func.def target<amdgpu.cdna2.core> abi(hal_kernel) @mixed_binary(%varying: reg<amdgpu.vgpr x2>, %uniform: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+  %sum = v_add_f64 %varying, %uniform
+  %left_difference = v_sub_f64 %varying, %uniform
+  %right_difference = v_sub_f64 %uniform, %varying
+  %product = v_mul_f64 %varying, %uniform
+  return %sum, %left_difference, %right_difference, %product
+}
+
+// ====
+
+// RUN: emit source-low target=amdgpu:gfx90a output=low
+
+// Repeated reads of the same scalar tuple consume one source slot.
+func.def @repeated_source(%bits: i64) -> (f64, f64, f64) {
+  %value = scalar.bitcast %bits : i64 to f64
+  %sum = scalar.addf %value, %value : f64
+  %product = scalar.mulf %value, %value : f64
+  %fused = scalar.fmaf %value, %value, %value : f64
+  func.return %sum, %product, %fused : f64, f64, f64
+}
+
+// ----
+low.func.def target<amdgpu.cdna2.core> abi(hal_kernel) @repeated_source(%value: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+  %sum = v_add_f64 %value, %value
+  %product = v_mul_f64 %value, %value
+  %fused = v_fma_f64 %value, %value, %value
+  return %sum, %product, %fused
+}
+
+// ====
+
+// RUN: emit source-low target=amdgpu:gfx90a output=low
+
+func.def @uniform_fma(%a_bits: i64, %b_bits: i64, %c_bits: i64) -> (f64, f64) {
+  %a = scalar.bitcast %a_bits : i64 to f64
+  %b = scalar.bitcast %b_bits : i64 to f64
+  %c = scalar.bitcast %c_bits : i64 to f64
+  %distinct = scalar.fmaf %a, %b, %c : f64
+  %repeated = scalar.fmaf %a, %b, %b : f64
+  func.return %distinct, %repeated : f64, f64
+}
+
+// ----
+low.func.def target<amdgpu.cdna2.core> abi(hal_kernel) @uniform_fma(%a: reg<amdgpu.sgpr x2>, %b: reg<amdgpu.sgpr x2>, %c: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+  %15 = slice %b[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %16 = v_mov_b32_copy %15
+  %17 = slice %b[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %18 = v_mov_b32_copy %17
+  %19 = concat(%16, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %20 = slice %c[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %21 = v_mov_b32_copy %20
+  %22 = slice %c[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %23 = v_mov_b32_copy %22
+  %24 = concat(%21, %23) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %distinct = v_fma_f64 %a, %19, %24
+  %30 = concat(%16, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %repeated = v_fma_f64 %a, %30, %30
+  return %distinct, %repeated
+}
+
+// ====
+
+// RUN: emit source-low target=amdgpu:gfx1100 output=low
+
+// RDNA retains two distinct scalar tuples and materializes only a third.
+func.def @uniform_sources(%a_bits: i64, %b_bits: i64, %c_bits: i64) -> (f64, f64, f64, f64) {
+  %a = scalar.bitcast %a_bits : i64 to f64
+  %b = scalar.bitcast %b_bits : i64 to f64
+  %c = scalar.bitcast %c_bits : i64 to f64
+  %sum = scalar.addf %a, %b : f64
+  %difference = scalar.subf %a, %b : f64
+  %product = scalar.mulf %a, %b : f64
+  %fused = scalar.fmaf %a, %b, %c : f64
+  func.return %sum, %difference, %product, %fused : f64, f64, f64, f64
+}
+
+// ----
+low.func.def target<amdgpu.rdna3.core> abi(hal_kernel) @uniform_sources(%a: reg<amdgpu.sgpr x2>, %b: reg<amdgpu.sgpr x2>, %c: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+  %sum = v_add_f64 %a, %b
+  %difference = v_sub_f64 %a, %b
+  %product = v_mul_f64 %a, %b
+  %24 = slice %c[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %25 = v_mov_b32_copy %24
+  %26 = slice %c[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %27 = v_mov_b32_copy %26
+  %28 = concat(%25, %27) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %fused = v_fma_f64 %a, %b, %28
+  return %sum, %difference, %product, %fused
+}
+
+// ====
+
+// RUN: emit source-low target=amdgpu:gfx1200 output=low
+
+func.def @uniform_extrema(%lhs_bits: i64, %rhs_bits: i64) -> (f64, f64, f64, f64) {
+  %lhs = scalar.bitcast %lhs_bits : i64 to f64
+  %rhs = scalar.bitcast %rhs_bits : i64 to f64
+  %minimum = scalar.minimumf %lhs, %rhs : f64
+  %maximum = scalar.maximumf %lhs, %rhs : f64
+  %minnum = scalar.minnumf %lhs, %rhs : f64
+  %maxnum = scalar.maxnumf %lhs, %rhs : f64
+  func.return %minimum, %maximum, %minnum, %maxnum : f64, f64, f64, f64
+}
+
+// ----
+low.func.def target<amdgpu.rdna4.core> abi(hal_kernel) @uniform_extrema(%lhs: reg<amdgpu.sgpr x2>, %rhs: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+  %minimum = v_minimum_f64 %lhs, %rhs
+  %maximum = v_maximum_f64 %lhs, %rhs
+  %minnum = v_min_num_f64 %lhs, %rhs
+  %maxnum = v_max_num_f64 %lhs, %rhs
+  return %minimum, %maximum, %minnum, %maxnum
+}

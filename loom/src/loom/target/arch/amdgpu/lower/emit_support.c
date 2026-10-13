@@ -1012,8 +1012,8 @@ iree_status_t loom_amdgpu_emit_resolved_vgpr_ternary(
   IREE_ASSERT(descriptor->descriptor != NULL);
   *out_value = LOOM_VALUE_ID_INVALID;
   loom_value_id_t operands[] = {lhs, rhs, third};
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_legalize_vop3_scalar_sources(context, source_op, operands));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_legalize_vop3_scalar_sources(
+      context, source_op, operands, IREE_ARRAYSIZE(operands)));
   loom_op_t* low_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
       context, descriptor, operands, IREE_ARRAYSIZE(operands),
@@ -1026,7 +1026,7 @@ iree_status_t loom_amdgpu_emit_resolved_vgpr_ternary(
 
 iree_status_t loom_amdgpu_legalize_vop3_scalar_sources(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t sources[3]) {
+    loom_value_id_t* sources, iree_host_size_t source_count) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_lower_context_descriptor_set(context);
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
@@ -1038,21 +1038,16 @@ iree_status_t loom_amdgpu_legalize_vop3_scalar_sources(
           LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_VOP3_TWO_SCALAR_SOURCES)
           ? 2u
           : 1u;
+  if (source_count <= scalar_source_limit) {
+    return iree_ok_status();
+  }
 
-  loom_value_id_t original_scalar_sources[3] = {
-      LOOM_VALUE_ID_INVALID,
-      LOOM_VALUE_ID_INVALID,
-      LOOM_VALUE_ID_INVALID,
-  };
-  loom_value_id_t legal_scalar_sources[3] = {
-      LOOM_VALUE_ID_INVALID,
-      LOOM_VALUE_ID_INVALID,
-      LOOM_VALUE_ID_INVALID,
-  };
+  loom_value_id_t original_scalar_sources[3];
+  loom_value_id_t legal_scalar_sources[3];
   uint32_t unique_scalar_source_count = 0;
   uint32_t retained_scalar_source_count = 0;
   const loom_module_t* module = loom_low_lower_context_module(context);
-  for (uint32_t i = 0; i < 3; ++i) {
+  for (iree_host_size_t i = 0; i < source_count; ++i) {
     const loom_type_t source_type = loom_module_value_type(module, sources[i]);
     if (!loom_amdgpu_low_type_is_register_class(
             context, source_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR)) {

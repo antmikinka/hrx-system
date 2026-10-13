@@ -749,7 +749,8 @@ static iree_status_t loom_amdgpu_table_lookup_emit_u4_register(
       low_selector,
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_legalize_vop3_scalar_sources(
-      context, source_op, low_lookup_operands));
+      context, source_op, low_lookup_operands,
+      IREE_ARRAYSIZE(low_lookup_operands)));
   loom_op_t* low_lookup_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
       context, &plan->permute_descriptor, low_lookup_operands,
@@ -763,7 +764,8 @@ static iree_status_t loom_amdgpu_table_lookup_emit_u4_register(
       low_selector,
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_legalize_vop3_scalar_sources(
-      context, source_op, high_lookup_operands));
+      context, source_op, high_lookup_operands,
+      IREE_ARRAYSIZE(high_lookup_operands)));
   loom_op_t* high_lookup_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
       context, &plan->permute_descriptor, high_lookup_operands,
@@ -831,7 +833,7 @@ static iree_status_t loom_amdgpu_lower_vector_table_lookup_packed_i8(
       loom_value_id_t operands[3] = {table_registers[0], table_registers[0],
                                      index_register};
       IREE_RETURN_IF_ERROR(loom_amdgpu_legalize_vop3_scalar_sources(
-          context, source_op, operands));
+          context, source_op, operands, IREE_ARRAYSIZE(operands)));
       loom_op_t* permute_op = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
           context, &plan->permute_descriptor, operands,

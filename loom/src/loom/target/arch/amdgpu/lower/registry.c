@@ -1950,14 +1950,6 @@ static const loom_target_vector_packet_policy_t kAmdgpuVectorPacketPolicy = {
     .native_bit_count_count = IREE_ARRAYSIZE(kAmdgpuVectorPacketBitCounts),
 };
 
-static iree_status_t loom_amdgpu_materialize_vop3_operands(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t* low_operands, iree_host_size_t operand_count) {
-  IREE_ASSERT_EQ(operand_count, 3);
-  return loom_amdgpu_legalize_vop3_scalar_sources(context, source_op,
-                                                  low_operands);
-}
-
 static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .name = IREE_SVL("amdgpu-register-lower"),
     .error_catalog = &loom_amdgpu_error_catalog,
@@ -1981,7 +1973,7 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
                         .user_data = NULL},
     .materialize_structural_operand =
         {.fn = loom_amdgpu_materialize_structural_operand, .user_data = NULL},
-    .materialize_descriptor_operands = loom_amdgpu_materialize_vop3_operands,
+    .materialize_descriptor_operands = loom_amdgpu_legalize_vop3_scalar_sources,
     .emit_cond_branch = {.fn = loom_amdgpu_emit_cond_branch, .user_data = NULL},
     .contract = LOOM_AMDGPU_CONTRACT,
     .query_op_contract =

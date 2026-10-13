@@ -60,7 +60,7 @@ func.def @float64_mixed_add(%lhs: f64, %rhs_bits: i64) -> (f64) {
 
 // ----
 low.func.def target<amdgpu.rdna3_5.core> abi(hal_kernel) @float64_mixed_add(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr x2>) asm {
-  %sum = v_add_f64 %rhs, %lhs
+  %sum = v_add_f64 %lhs, %rhs
   return %sum
 }
 

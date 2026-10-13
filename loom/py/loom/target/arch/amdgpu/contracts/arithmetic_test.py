@@ -617,6 +617,34 @@ def test_f32_literal_fma_product_flushing_forms_require_afn() -> None:
         )
 
 
+def test_fp64_binary_rules_legalize_packet_sources() -> None:
+    compiled = _compiled_arithmetic_rules()
+    for source_op, descriptor_key in (
+        (scalar_arithmetic.scalar_addf, "amdgpu.v_add_f64"),
+        (scalar_arithmetic.scalar_subf, "amdgpu.v_sub_f64"),
+        (scalar_arithmetic.scalar_mulf, "amdgpu.v_mul_f64"),
+        (scalar_arithmetic.scalar_minimumf, "amdgpu.v_minimum_f64"),
+        (scalar_arithmetic.scalar_maximumf, "amdgpu.v_maximum_f64"),
+        (scalar_arithmetic.scalar_minnumf, "amdgpu.v_min_f64"),
+        (scalar_arithmetic.scalar_maxnumf, "amdgpu.v_max_f64"),
+        (vector.vector_minimumf, "amdgpu.v_minimum_f64"),
+        (vector.vector_maximumf, "amdgpu.v_maximum_f64"),
+        (vector.vector_minnumf, "amdgpu.v_min_f64"),
+        (vector.vector_maxnumf, "amdgpu.v_max_f64"),
+    ):
+        direct_rules = tuple(
+            rule
+            for rule in _rules_for_source_op(compiled, source_op)
+            if _rule_descriptor_keys(compiled, rule) == (descriptor_key,)
+        )
+        assert direct_rules, source_op.name
+        for rule in direct_rules:
+            emit = compiled.emits[rule.emit_start]
+            assert (
+                emit.operand_materialization is DescriptorOperandMaterialization.TARGET
+            ), (source_op.name, descriptor_key)
+
+
 def test_exact_f32_division_uses_negated_fma_residuals() -> None:
     compiled = _compiled_arithmetic_rules()
 
