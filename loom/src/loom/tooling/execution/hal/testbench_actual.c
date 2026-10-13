@@ -559,6 +559,58 @@ static iree_status_t loom_run_hal_testbench_reflect_function_parameters(
   return status;
 }
 
+iree_status_t loom_run_hal_testbench_actual_provider_select_target(
+    loom_run_hal_testbench_actual_provider_t* provider) {
+  if (provider->selected_target_profile != NULL || provider->compile_rejected) {
+    return iree_ok_status();
+  }
+  if (provider->context == NULL || provider->module == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL actual provider target selection requires "
+                            "context and module state");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_testbench_context_add_module_runtime_requirements(
+          provider->context, provider->module, provider->sanitizer));
+
+  loomc_iree_hal_target_selection_t selection = {0};
+  loomc_result_t* result = NULL;
+  iree_status_t status = loom_run_hal_testbench_context_select_target(
+      provider->context, loomc_make_cstring_view("Loom testbench live device"),
+      provider->requested_target_profile, &selection, &result);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_testbench_observe_result(provider, result);
+  }
+  if (iree_status_is_ok(status) && !loomc_result_succeeded(result)) {
+    provider->compiler_result = result;
+    result = NULL;
+    loom_run_hal_testbench_record_result_rejection(
+        provider, IREE_SV("target"),
+        IREE_SV("HAL target selection rejected the live device"),
+        provider->compiler_result);
+  }
+  if (iree_status_is_ok(status) && !provider->compile_rejected) {
+    IREE_ASSERT(provider->context->selected_target_route != NULL);
+    const loom_target_profile_t* native_profile =
+        loomc_target_profile_get_interop_view(selection.target_profile);
+    const loom_target_bundle_t* target_bundle =
+        loom_target_profile_bundle(native_profile);
+    if (target_bundle == NULL || target_bundle->snapshot == NULL) {
+      status = iree_make_status(
+          IREE_STATUS_INTERNAL,
+          "selected HAL target profile has no native target snapshot");
+    } else {
+      provider->selected_target_profile = selection.target_profile;
+      selection.target_profile = NULL;
+      provider->target_snapshot = target_bundle->snapshot;
+      provider->executable_target = selection.executable_target;
+    }
+  }
+  loomc_result_release(result);
+  loomc_target_profile_release(selection.target_profile);
+  return status;
+}
+
 iree_status_t loom_run_hal_testbench_actual_provider_compile(
     loom_run_hal_testbench_actual_provider_t* provider) {
   if (provider->prepared_candidate_initialized || provider->compile_rejected) {
@@ -587,9 +639,6 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
       is_pipeline
           ? LOOM_RUN_HAL_DISPATCH_SEQUENCE_REPRESENTATION_DIRECT
           : LOOM_RUN_HAL_DISPATCH_SEQUENCE_REPRESENTATION_COMMAND_BUFFER;
-  IREE_RETURN_IF_ERROR(
-      loom_run_hal_testbench_context_add_module_runtime_requirements(
-          provider->context, provider->module, provider->sanitizer));
 
   iree_string_view_t entry_symbol = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_run_hal_testbench_module_symbol_name_from_ref(
@@ -606,47 +655,13 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
         &provider->invocation_options.function_name));
   }
 
-  loomc_iree_hal_target_selection_t selection = {0};
-  loomc_result_t* result = NULL;
-  iree_status_t status = loom_run_hal_testbench_context_select_target(
-      provider->context, loomc_make_cstring_view("Loom testbench live device"),
-      provider->requested_target_profile, &selection, &result);
-  if (iree_status_is_ok(status)) {
-    status = loom_run_hal_testbench_observe_result(provider, result);
-  }
-  if (iree_status_is_ok(status) && !loomc_result_succeeded(result)) {
-    provider->compiler_result = result;
-    result = NULL;
-    loom_run_hal_testbench_record_result_rejection(
-        provider, IREE_SV("target"),
-        IREE_SV("HAL target selection rejected the live device"),
-        provider->compiler_result);
-  }
-  if (iree_status_is_ok(status) && !provider->compile_rejected) {
-    IREE_ASSERT(provider->context->selected_target_route != NULL);
-    provider->selected_target_profile = selection.target_profile;
-    selection.target_profile = NULL;
-    provider->executable_target = selection.executable_target;
-    const loom_target_profile_t* native_profile =
-        loomc_target_profile_get_interop_view(
-            provider->selected_target_profile);
-    const loom_target_bundle_t* target_bundle =
-        loom_target_profile_bundle(native_profile);
-    if (target_bundle == NULL || target_bundle->snapshot == NULL) {
-      status = iree_make_status(
-          IREE_STATUS_INTERNAL,
-          "selected HAL target profile has no native target snapshot");
-    } else {
-      provider->target_snapshot = target_bundle->snapshot;
-    }
-  }
-  loomc_result_release(result);
-  result = NULL;
-  loomc_target_profile_release(selection.target_profile);
+  iree_status_t status =
+      loom_run_hal_testbench_actual_provider_select_target(provider);
   if (!iree_status_is_ok(status) || provider->compile_rejected) {
     return status;
   }
 
+  loomc_result_t* result = NULL;
   loomc_module_t* compile_module = NULL;
   status = iree_status_from_loomc(loomc_module_clone(
       provider->module, provider->compilation->workspace,

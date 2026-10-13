@@ -286,6 +286,14 @@ void loom_run_hal_testbench_actual_provider_initialize(
 void loom_run_hal_testbench_actual_provider_deinitialize(
     loom_run_hal_testbench_actual_provider_t* provider);
 
+// Selects and retains the exact live-device target for |provider|.
+//
+// Selection provisions module runtime requirements before creating the HAL
+// runtime. It may be performed before the invocation has been adapted to a
+// target-owned executable shape; repeated calls preserve the first selection.
+iree_status_t loom_run_hal_testbench_actual_provider_select_target(
+    loom_run_hal_testbench_actual_provider_t* provider);
+
 // Compiles and prepares the selected actual candidate if needed.
 iree_status_t loom_run_hal_testbench_actual_provider_compile(
     loom_run_hal_testbench_actual_provider_t* provider);
