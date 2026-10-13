@@ -13,6 +13,14 @@ from dataclasses import replace
 from pathlib import Path
 
 from loom.gen.target.arch.amdgpu.refs import amdgpu_target_refs
+from loom.target.arch.amdgpu.descriptors.cdna import (
+    _AMDGPU_CDNA2_CORE_DESCRIPTOR_SET_BASE,
+    _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
+    _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
+    _AMDGPU_GFX9_4_GENERIC_CORE_DESCRIPTOR_SET_BASE,
+    AMDGPU_MFMA_TIMINGS_BY_DESCRIPTOR_SET,
+)
+from loom.target.arch.amdgpu.descriptors.common import _amdgpu_mfma_schedule_class_name
 from loom.target.arch.amdgpu.encoding import (
     AMDGPU_ENCODING_FIELD_IDS,
     AMDGPU_ENCODING_FORMAT_IDS,
@@ -356,6 +364,24 @@ def test_descriptor_trait_names_include_resource_and_encoding_facts() -> None:
         "LOOM_AMDGPU_DESCRIPTOR_TRAIT_SDWA",
         "LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_ISSUE",
     )
+
+
+def test_matrix_pass_traits_are_independent_of_latency_estimates() -> None:
+    for descriptor_set in (
+        _AMDGPU_CDNA2_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_GFX9_4_GENERIC_CORE_DESCRIPTOR_SET_BASE,
+    ):
+        descriptor_set = replace(
+            descriptor_set,
+            schedule_classes=tuple(replace(row, latency_cycles=91) for row in descriptor_set.schedule_classes),
+        )
+        context = amdgpu_target_refs._descriptor_trait_context(descriptor_set)
+        for key, timing in AMDGPU_MFMA_TIMINGS_BY_DESCRIPTOR_SET[descriptor_set.key].items():
+            descriptor = _descriptor(key, schedule_class=_amdgpu_mfma_schedule_class_name(key))
+            traits = amdgpu_target_refs._descriptor_trait_names(context, descriptor)
+            assert f"({timing.execution_passes}u << LOOM_AMDGPU_DESCRIPTOR_MATRIX_PASSES_SHIFT)" in traits
 
 
 def test_descriptor_trait_names_classify_dpp_encoding_families() -> None:

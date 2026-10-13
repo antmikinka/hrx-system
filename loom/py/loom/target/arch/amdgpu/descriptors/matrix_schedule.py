@@ -15,17 +15,29 @@ from ..matrix_formats import AMDGPU_F8F6F4_MATRIX_PHYSICAL_FORMATS
 
 @dataclass(frozen=True, slots=True)
 class _AmdgpuMatrixTiming:
-    """LLVM scheduling-model timing for one AMDGPU matrix instruction."""
+    """Execution passes and the scheduler's latency estimate for one MFMA.
+
+    Execution passes are an instruction property used by the ISA dependency
+    rules. The estimated latency includes operand read advance and must not
+    stand in for that property when computing required wait states.
+    """
 
     latency_cycles: int
-    reciprocal_throughput_cycles: int
+    execution_passes: int
 
 
 def _f8f6f4_physical_timing_rows(
     descriptor_key_prefix: str, timing: _AmdgpuMatrixTiming
 ) -> dict[str, _AmdgpuMatrixTiming]:
     return {
-        f"{descriptor_key_prefix}_{lhs_format.token}_{rhs_format.token}": timing
+        f"{descriptor_key_prefix}_{lhs_format.token}_{rhs_format.token}": (
+            _AmdgpuMatrixTiming(
+                timing.execution_passes * 2 + 4,
+                timing.execution_passes * 2,
+            )
+            if lhs_format.element_bit_count == 8 or rhs_format.element_bit_count == 8
+            else timing
+        )
         for lhs_format in AMDGPU_F8F6F4_MATRIX_PHYSICAL_FORMATS
         for rhs_format in AMDGPU_F8F6F4_MATRIX_PHYSICAL_FORMATS
     }
@@ -139,9 +151,9 @@ _AMDGPU_GFX9_4_GENERIC_MATRIX_TIMINGS = {
             gfx942_timing.latency_cycles,
             _AMDGPU_GFX950_MATRIX_TIMINGS[descriptor_key].latency_cycles,
         ),
-        reciprocal_throughput_cycles=max(
-            gfx942_timing.reciprocal_throughput_cycles,
-            _AMDGPU_GFX950_MATRIX_TIMINGS[descriptor_key].reciprocal_throughput_cycles,
+        execution_passes=max(
+            gfx942_timing.execution_passes,
+            _AMDGPU_GFX950_MATRIX_TIMINGS[descriptor_key].execution_passes,
         ),
     )
     for descriptor_key, gfx942_timing in (

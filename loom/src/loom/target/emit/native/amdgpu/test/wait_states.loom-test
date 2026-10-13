@@ -549,7 +549,7 @@ low.func.def target<amdgpu.cdna3.core>(@gfx942_target) @gfx942_smfmac_result_to_
 
 // ----
 amdgpu.wait_state_plan states=1 progress=3 hazards=1
-state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=17 observed=0 residual=17 matrix=mfma_pre_gfx950/matrix_srcc_overlap/pass16
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=9 observed=0 residual=9 matrix=mfma_pre_gfx950/matrix_srcc_overlap/pass8
 
 // ====
 

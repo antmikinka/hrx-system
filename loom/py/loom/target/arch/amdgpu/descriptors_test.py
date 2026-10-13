@@ -995,7 +995,7 @@ def test_gfx9_4_matrix_schedule_classes_match_member_timings() -> None:
             assert schedule_class.issue_uses == (
                 IssueUse(
                     _RESOURCE_MFMA,
-                    cycles=timing.reciprocal_throughput_cycles,
+                    cycles=timing.execution_passes,
                     units=1,
                 ),
             )
@@ -1021,10 +1021,24 @@ def test_gfx9_4_matrix_schedule_classes_match_member_timings() -> None:
             gfx942_timing.latency_cycles,
             gfx950_timing.latency_cycles,
         )
-        assert generic_timing.reciprocal_throughput_cycles == max(
-            gfx942_timing.reciprocal_throughput_cycles,
-            gfx950_timing.reciprocal_throughput_cycles,
+        assert generic_timing.execution_passes == max(
+            gfx942_timing.execution_passes,
+            gfx950_timing.execution_passes,
         )
+
+
+def test_gfx950_f8f6f4_execution_passes_cover_both_operand_selectors() -> None:
+    # LLVM's SIDPGFX950FullSpeedModel doubles the execution passes when either
+    # source is FP8/BF8, for both scaled and unscaled forms.
+    for prefix in ("v_mfma", "v_mfma_scale"):
+        for shape, narrow_passes in (("16x16x128", 4), ("32x32x64", 8)):
+            for lhs in ("f8", "f6", "f4"):
+                for rhs in ("f8", "f6", "f4"):
+                    key = f"amdgpu.{prefix}_f32_{shape}_f8f6f4_{lhs}_{rhs}"
+                    expected = narrow_passes * (2 if "f8" in (lhs, rhs) else 1)
+                    timing = _AMDGPU_GFX950_MATRIX_TIMINGS[key]
+                    assert timing.execution_passes == expected, key
+                    assert timing.latency_cycles == expected + 4, key
 
 
 def test_gfx950_f8f6f4_mfma_descriptors_model_physical_abis() -> None:

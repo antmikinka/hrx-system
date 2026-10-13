@@ -128,8 +128,6 @@ enum {
 typedef struct loom_amdgpu_wait_state_matrix_family_use_row_t {
   // Non-zero when this matrix family reads VALU results as matrix inputs.
   uint8_t reads_valu_results;
-  // Non-zero when this matrix family participates in result wait-state timing.
-  uint8_t tracks_result_waits;
   // Matrix result use kind for each packet operand index.
   loom_amdgpu_wait_state_matrix_result_use_t
       operand_uses[LOOM_AMDGPU_WAIT_STATE_MATRIX_OPERAND_USE_CAPACITY];
@@ -140,7 +138,6 @@ static const loom_amdgpu_wait_state_matrix_family_use_row_t
         [LOOM_AMDGPU_MATRIX_FAMILY_MFMA] =
             {
                 .reads_valu_results = 1,
-                .tracks_result_waits = 1,
                 .operand_uses =
                     {
                         LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB,
@@ -151,7 +148,6 @@ static const loom_amdgpu_wait_state_matrix_family_use_row_t
         [LOOM_AMDGPU_MATRIX_FAMILY_SMFMAC] =
             {
                 .reads_valu_results = 1,
-                .tracks_result_waits = 1,
                 .operand_uses =
                     {
                         LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC,
@@ -535,38 +531,6 @@ loom_amdgpu_wait_state_contract_for_descriptor(
                                                 descriptor);
   return loom_amdgpu_matrix_contract_wait_state_descriptor_for_low_descriptor_ref(
       descriptor_ref);
-}
-
-static bool loom_amdgpu_wait_state_matrix_tracks_result_waits(
-    const loom_amdgpu_matrix_contract_descriptor_t* contract) {
-  if ((uint32_t)contract->family >=
-      LOOM_AMDGPU_WAIT_STATE_MATRIX_FAMILY_USE_COUNT) {
-    return false;
-  }
-  return kMatrixFamilyUseRows[contract->family].tracks_result_waits != 0;
-}
-
-static bool loom_amdgpu_wait_state_matrix_result_pass_count(
-    const loom_amdgpu_matrix_contract_descriptor_t* contract,
-    uint16_t* out_pass_count) {
-  *out_pass_count = 0;
-  if (!loom_amdgpu_wait_state_matrix_tracks_result_waits(contract)) {
-    return false;
-  }
-  switch (contract->result_payload.register_count) {
-    case 2:
-    case 4:
-    case 8:
-    case 16:
-    case 32:
-      *out_pass_count = contract->result_payload.register_count;
-      return true;
-    default:
-      IREE_ASSERT_UNREACHABLE(
-          "generated AMDGPU matrix contract has unsupported wait-state result "
-          "payload register count");
-      return false;
-  }
 }
 
 static bool loom_amdgpu_wait_state_matrix_result_table_use(
@@ -1608,8 +1572,9 @@ static iree_status_t loom_amdgpu_wait_state_packet_analyze(
   out_info->matrix_contract =
       loom_amdgpu_wait_state_contract_for_descriptor(builder, descriptor);
   if (out_info->matrix_contract != NULL) {
-    if (loom_amdgpu_wait_state_matrix_result_pass_count(
-            out_info->matrix_contract, &out_info->matrix_pass_count)) {
+    out_info->matrix_pass_count =
+        loom_amdgpu_descriptor_matrix_pass_count(descriptor_traits);
+    if (out_info->matrix_pass_count != 0) {
       out_info->flags |= LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_MATRIX;
       if (!loom_amdgpu_wait_state_matrix_result_wait_cycles(
               builder, out_info->matrix_pass_count,

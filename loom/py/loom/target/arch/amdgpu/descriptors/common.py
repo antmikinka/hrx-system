@@ -244,7 +244,7 @@ def _amdgpu_mfma_schedule_classes(
             issue_uses=(
                 IssueUse(
                     _RESOURCE_MFMA,
-                    cycles=timing.reciprocal_throughput_cycles,
+                    cycles=timing.execution_passes,
                     units=1,
                 ),
             ),

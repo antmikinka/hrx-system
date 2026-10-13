@@ -63,6 +63,21 @@ typedef enum loom_amdgpu_descriptor_trait_bit_e {
 } loom_amdgpu_descriptor_trait_bit_t;
 typedef uint32_t loom_amdgpu_descriptor_traits_t;
 
+enum {
+  // MFMA execution passes occupy five bits in the descriptor's existing trait
+  // word. Zero identifies descriptors without software MFMA result waits.
+  LOOM_AMDGPU_DESCRIPTOR_MATRIX_PASSES_SHIFT = 17,
+  LOOM_AMDGPU_DESCRIPTOR_MATRIX_PASSES_MASK = 31u << 17,
+};
+
+// Returns the hardware MFMA execution passes, independently of result width
+// and the scheduler's estimated latency.
+static inline uint16_t loom_amdgpu_descriptor_matrix_pass_count(
+    loom_amdgpu_descriptor_traits_t traits) {
+  return (uint16_t)((traits & LOOM_AMDGPU_DESCRIPTOR_MATRIX_PASSES_MASK) >>
+                    LOOM_AMDGPU_DESCRIPTOR_MATRIX_PASSES_SHIFT);
+}
+
 // Relative completion order of VMEM loads and cache invalidations. Distinct
 // classes may complete out of order even when they share a native wait counter.
 typedef enum loom_amdgpu_vmem_result_order_class_e {

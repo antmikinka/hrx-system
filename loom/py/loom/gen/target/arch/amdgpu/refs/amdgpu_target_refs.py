@@ -36,6 +36,9 @@ from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
     amdgpu_immediate_encoding_id_items,
     build_amdgpu_core_descriptor_sets_from_specs,
 )
+from loom.target.arch.amdgpu.descriptors.cdna import (  # noqa: E402
+    AMDGPU_MFMA_TIMINGS_BY_DESCRIPTOR_SET,
+)
 from loom.target.arch.amdgpu.descriptors.common import (  # noqa: E402
     _REG_EXEC,
     _SCHEDULE_VMEM_CACHE_INVALIDATE,
@@ -546,6 +549,12 @@ def _descriptor_trait_names(
         trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_SCALAR_ALU")
     if uses_matrix:
         trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_MATRIX")
+        timings = AMDGPU_MFMA_TIMINGS_BY_DESCRIPTOR_SET.get(context.descriptor_set.key)
+        if timings is not None:
+            timing = timings.get(descriptor.key)
+            if timing is None or timing.execution_passes not in (2, 4, 8, 16):
+                raise ValueError(f"AMDGPU matrix descriptor '{descriptor.key}' has no qualified execution pass count in '{context.descriptor_set.key}'")
+            trait_names.append(f"({timing.execution_passes}u << LOOM_AMDGPU_DESCRIPTOR_MATRIX_PASSES_SHIFT)")
     if descriptor.encoding_format_id in _VECTOR_MEMORY_ENCODING_FORMAT_IDS:
         trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_MEMORY")
     if descriptor.key in _TRANSCENDENTAL_DESCRIPTOR_KEYS:

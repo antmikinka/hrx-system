@@ -1,0 +1,152 @@
+// Matrix execution passes are independent of the accumulator footprint.
+// RUN: emit amdgpu-assembly @cdna2_four_results_eight_passes strategy=source
+
+amdgpu.target<gfx90a> @target
+
+low.func.def target<amdgpu.cdna2.core>(@target) @cdna2_four_results_eight_passes(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr x4>, %address: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>) asm {
+  %result = v_mfma_f32_16x16x4f32 %lhs, %rhs, %acc
+  %lane = slice %result[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  global_store_dword_saddr %address, %lane, %base
+  return
+}
+
+// ----
+  v_mfma_f32_16x16x4f32 v[4:7], v0, v1, v[4:7]
+  s_nop 10
+  global_store_dword v2, v4, s[0:1] offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(15)
+  s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly @cdna2_sixteen_results_eight_passes strategy=source
+
+amdgpu.target<gfx90a> @target
+
+low.func.def target<amdgpu.cdna2.core>(@target) @cdna2_sixteen_results_eight_passes(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr x16>, %address: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>) asm {
+  %result = v_mfma_f32_16x16x1f32 %lhs, %rhs, %acc
+  %lane = slice %result[0] : reg<amdgpu.vgpr x16> -> reg<amdgpu.vgpr>
+  global_store_dword_saddr %address, %lane, %base
+  return
+}
+
+// ----
+  v_mfma_f32_16x16x1f32 v[16:31], v0, v1, v[16:31]
+  s_nop 10
+  global_store_dword v2, v16, s[0:1] offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(15)
+  s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly @cdna2_four_results_two_passes strategy=source
+
+amdgpu.target<gfx90a> @target
+
+low.func.def target<amdgpu.cdna2.core>(@target) @cdna2_four_results_two_passes(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr x4>, %address: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>) asm {
+  %result = v_mfma_f32_4x4x1f32 %lhs, %rhs, %acc
+  %lane = slice %result[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  global_store_dword_saddr %address, %lane, %base
+  return
+}
+
+// ----
+  v_mfma_f32_4x4x1f32 v[4:7], v0, v1, v[4:7]
+  s_nop 4
+  global_store_dword v2, v4, s[0:1] offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(15)
+  s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly @cdna2_thirty_two_results_sixteen_passes strategy=source
+
+amdgpu.target<gfx90a> @target
+
+low.func.def target<amdgpu.cdna2.core>(@target) @cdna2_thirty_two_results_sixteen_passes(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr x32>, %address: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>) asm {
+  %result = v_mfma_f32_32x32x1f32 %lhs, %rhs, %acc
+  %lane = slice %result[0] : reg<amdgpu.vgpr x32> -> reg<amdgpu.vgpr>
+  global_store_dword_saddr %address, %lane, %base
+  return
+}
+
+// ----
+  v_mfma_f32_32x32x1f32 v[32:63], v0, v1, v[32:63]
+  s_nop 15
+  s_nop 2
+  global_store_dword v2, v32, s[0:1] offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(15)
+  s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly @cdna3_sixteen_results_eight_passes strategy=source
+
+amdgpu.target<gfx942> @target
+
+low.func.def target<amdgpu.cdna3.core>(@target) @cdna3_sixteen_results_eight_passes(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>, %acc: reg<amdgpu.vgpr x16>, %address: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>) asm {
+  %result = v_mfma_f32_32x32x8_f16 %lhs, %rhs, %acc
+  %lane = slice %result[0] : reg<amdgpu.vgpr x16> -> reg<amdgpu.vgpr>
+  global_store_dword_saddr %address, %lane, %base
+  return
+}
+
+// ----
+  v_mfma_f32_32x32x8_f16 v[16:31], v[0:1], v[2:3], v[16:31]
+  s_nop 10
+  global_store_dword v4, v16, s[0:1] offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(15)
+  s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly @cdna4_sixteen_results_eight_passes strategy=source
+
+amdgpu.target<gfx950> @target
+
+low.func.def target<amdgpu.cdna4.core>(@target) @cdna4_sixteen_results_eight_passes(%lhs: reg<amdgpu.vgpr x4>, %rhs: reg<amdgpu.vgpr x4>, %acc: reg<amdgpu.vgpr x16>, %address: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>) asm {
+  %result = v_mfma_f32_32x32x16_f16 %lhs, %rhs, %acc
+  %lane = slice %result[0] : reg<amdgpu.vgpr x16> -> reg<amdgpu.vgpr>
+  global_store_dword_saddr %address, %lane, %base
+  return
+}
+
+// ----
+  v_mfma_f32_32x32x16_f16 v[16:31], v[0:3], v[4:7], v[16:31]
+  s_nop 11
+  global_store_dword v8, v16, s[0:1] offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(15)
+  s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly @cdna4_narrow_sources_four_passes strategy=source
+
+amdgpu.target<gfx950> @target
+
+low.func.def target<amdgpu.cdna4.core>(@target) @cdna4_narrow_sources_four_passes(%lhs: reg<amdgpu.vgpr x6>, %rhs: reg<amdgpu.vgpr x4>, %acc: reg<amdgpu.vgpr x4>, %address: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>) asm {
+  %result = v_mfma_f32_16x16x128_f8f6f4_f6_f4 %lhs, %rhs, %acc {matrix_a_fmt = "fp6", matrix_b_fmt = "fp4"}
+  %lane = slice %result[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  global_store_dword_saddr %address, %lane, %base
+  return
+}
+
+// ----
+  v_mfma_f32_16x16x128_f8f6f4 v[12:15], v[0:5], v[8:11], v[12:15] cbsz:2 blgp:4
+  s_nop 7
+  global_store_dword v6, v12, s[0:1] offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(15)
+  s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly @cdna4_fp8_source_eight_passes strategy=source
+
+amdgpu.target<gfx950> @target
+
+low.func.def target<amdgpu.cdna4.core>(@target) @cdna4_fp8_source_eight_passes(%lhs: reg<amdgpu.vgpr x6>, %rhs: reg<amdgpu.vgpr x8>, %acc: reg<amdgpu.vgpr x4>, %address: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>) asm {
+  %result = v_mfma_f32_16x16x128_f8f6f4_f6_f8 %lhs, %rhs, %acc {matrix_a_fmt = "fp6", matrix_b_fmt = "bf8"}
+  %lane = slice %result[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  global_store_dword_saddr %address, %lane, %base
+  return
+}
+
+// ----
+  v_mfma_f32_16x16x128_f8f6f4 v[16:19], v[0:5], v[8:15], v[16:19] cbsz:2 blgp:1
+  s_nop 11
+  global_store_dword v6, v16, s[0:1] offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(15)
+  s_endpgm
