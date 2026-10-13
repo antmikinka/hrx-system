@@ -429,6 +429,31 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "cfg_dataflow",
+    srcs = ["cfg_dataflow.c"],
+    hdrs = ["cfg_dataflow.h"],
+    deps = [
+        ":cfg_graph",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "cfg_dataflow_test",
+    srcs = ["cfg_dataflow_test.cc"],
+    deps = [
+        ":cfg_dataflow",
+        ":cfg_graph",
+        ":cfg_graph_test_util",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "cfg_loop",
     srcs = ["cfg_loop.c"],
     hdrs = ["cfg_loop.h"],

@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/util/cfg_dataflow.h"
 #include "loom/util/segmented_storage.h"
 
 // GFX11 has 106 ordinary SGPR DWORDs. VCC has its own allocation class and
@@ -30,8 +31,6 @@ typedef struct loom_amdgpu_mask_write_block_t {
   uint64_t killed[2];
   // Mask reads reaching the block through any predecessor.
   uint64_t incoming[2];
-  // Whether this block already has a pending propagation visit.
-  bool queued;
 } loom_amdgpu_mask_write_block_t;
 
 typedef struct loom_amdgpu_mask_write_event_t {
@@ -261,41 +260,24 @@ iree_status_t loom_amdgpu_mask_write_wait_collect(
   return iree_ok_status();
 }
 
-static void loom_amdgpu_mask_write_propagate(
-    loom_amdgpu_mask_write_wait_t* state, uint16_t* worklist) {
-  const loom_cfg_graph_t* graph = &state->schedule->cfg_graph;
-  iree_host_size_t count = graph->reverse_postorder.count;
-  // Pop in reverse postorder so acyclic edges normally need only one visit.
-  for (iree_host_size_t i = 0; i < count; ++i) {
-    const uint16_t index = graph->reverse_postorder.values[count - i - 1];
-    worklist[i] = index;
-    state->blocks[index].queued = true;
+static iree_status_t loom_amdgpu_mask_write_transfer(
+    void* user_data, uint16_t source_block_index, uint16_t target_block_index,
+    bool* out_changed) {
+  loom_amdgpu_mask_write_wait_t* state =
+      (loom_amdgpu_mask_write_wait_t*)user_data;
+  const loom_amdgpu_mask_write_block_t* source =
+      &state->blocks[source_block_index];
+  loom_amdgpu_mask_write_block_t* target = &state->blocks[target_block_index];
+  *out_changed = false;
+  for (unsigned word = 0; word < 2; ++word) {
+    const uint64_t incoming = source->generated[word] |
+                              (source->incoming[word] & ~source->killed[word]);
+    const uint64_t added = incoming & ~target->incoming[word];
+    *out_changed |=
+        (added & ~(target->killed[word] | target->generated[word])) != 0;
+    target->incoming[word] |= incoming;
   }
-  while (count != 0) {
-    const uint16_t index = worklist[--count];
-    loom_amdgpu_mask_write_block_t* block = &state->blocks[index];
-    block->queued = false;
-    const uint64_t outgoing[2] = {
-        block->generated[0] | (block->incoming[0] & ~block->killed[0]),
-        block->generated[1] | (block->incoming[1] & ~block->killed[1]),
-    };
-    const loom_cfg_block_index_span_t successors =
-        loom_cfg_graph_successors(graph, index);
-    for (iree_host_size_t i = 0; i < successors.count; ++i) {
-      const uint16_t successor = successors.values[i];
-      loom_amdgpu_mask_write_block_t* next = &state->blocks[successor];
-      if (((outgoing[0] & ~next->incoming[0]) |
-           (outgoing[1] & ~next->incoming[1])) == 0) {
-        continue;
-      }
-      next->incoming[0] |= outgoing[0];
-      next->incoming[1] |= outgoing[1];
-      if (!next->queued) {
-        worklist[count++] = successor;
-        next->queued = true;
-      }
-    }
-  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_mask_write_wait_resolve(
@@ -304,11 +286,9 @@ iree_status_t loom_amdgpu_mask_write_wait_resolve(
   if (state->event_count == 0) {
     return iree_ok_status();
   }
-  uint16_t* worklist = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(state->arena, state->schedule->block_count,
-                                sizeof(*worklist), (void**)&worklist));
-  loom_amdgpu_mask_write_propagate(state, worklist);
+  IREE_RETURN_IF_ERROR(loom_cfg_dataflow_solve(&state->schedule->cfg_graph,
+                                               loom_amdgpu_mask_write_transfer,
+                                               state, state->arena));
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0;
        i < state->event_count && iree_status_is_ok(status); ++i) {

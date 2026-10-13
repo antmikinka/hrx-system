@@ -10,6 +10,7 @@
 
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/util/cfg_dataflow.h"
 #include "loom/util/cfg_graph.h"
 
 // The two-slot horizon bounds both live local sources and relevant prefix
@@ -50,8 +51,6 @@ typedef struct loom_amdgpu_store_data_block_t {
   loom_amdgpu_store_data_source_t sources[2];
   // Block issue length saturated at the retention horizon.
   uint8_t cycles;
-  // True while the block is in the static propagation worklist.
-  bool queued;
 } loom_amdgpu_store_data_block_t;
 
 struct loom_amdgpu_store_data_wait_state_t {
@@ -322,58 +321,35 @@ static uint64_t loom_amdgpu_store_data_incoming_word(
     iree_host_size_t word) {
   uint64_t bits = 0;
   for (iree_host_size_t i = 0; i < predecessors.count; ++i) {
+    if (!loom_cfg_graph_block_is_reachable(&state->schedule->cfg_graph,
+                                           predecessors.values[i])) {
+      continue;
+    }
     bits |= loom_amdgpu_store_data_block_bits(state, predecessors.values[i],
                                               4 + plane)[word];
   }
   return bits;
 }
 
-static void loom_amdgpu_store_data_propagate(
-    loom_amdgpu_store_data_wait_state_t* state, uint16_t* worklist) {
-  const iree_host_size_t block_count = state->schedule->block_count;
-  for (uint16_t i = 0; i < block_count; ++i) {
-    worklist[i] = i;
-    state->blocks[i].queued = true;
-  }
-  iree_host_size_t head = 0, tail = 0, count = block_count;
-  while (count != 0) {
-    const uint16_t index = worklist[head];
-    head = (head + 1) % block_count;
-    --count;
-    loom_amdgpu_store_data_block_t* block = &state->blocks[index];
-    block->queued = false;
-    if (block->cycles == 2) {
-      continue;
-    }
-    const loom_cfg_block_index_span_t predecessors =
-        loom_cfg_graph_predecessors(&state->schedule->cfg_graph, index);
-    bool changed = false;
-    for (unsigned plane = 0; plane + block->cycles < 2; ++plane) {
-      uint64_t* outgoing =
-          loom_amdgpu_store_data_block_bits(state, index, 4 + plane);
-      for (iree_host_size_t word = 0; word < state->word_count; ++word) {
-        const uint64_t incoming = loom_amdgpu_store_data_incoming_word(
-            state, predecessors, plane + block->cycles, word);
-        changed |= (incoming & ~outgoing[word]) != 0;
-        outgoing[word] |= incoming;
-      }
-    }
-    if (!changed) {
-      continue;
-    }
-    const loom_cfg_block_index_span_t successors =
-        loom_cfg_graph_successors(&state->schedule->cfg_graph, index);
-    for (iree_host_size_t i = 0; i < successors.count; ++i) {
-      const uint16_t successor = successors.values[i];
-      if (state->blocks[successor].queued) {
-        continue;
-      }
-      worklist[tail] = successor;
-      tail = (tail + 1) % block_count;
-      ++count;
-      state->blocks[successor].queued = true;
+static iree_status_t loom_amdgpu_store_data_transfer(
+    void* user_data, uint16_t source_block_index, uint16_t target_block_index,
+    bool* out_changed) {
+  loom_amdgpu_store_data_wait_state_t* state =
+      (loom_amdgpu_store_data_wait_state_t*)user_data;
+  const loom_amdgpu_store_data_block_t* target =
+      &state->blocks[target_block_index];
+  *out_changed = false;
+  for (unsigned plane = 0; plane + target->cycles < 2; ++plane) {
+    uint64_t* outgoing =
+        loom_amdgpu_store_data_block_bits(state, target_block_index, 4 + plane);
+    const uint64_t* incoming = loom_amdgpu_store_data_block_bits(
+        state, source_block_index, 4 + plane + target->cycles);
+    for (iree_host_size_t word = 0; word < state->word_count; ++word) {
+      *out_changed |= (incoming[word] & ~outgoing[word]) != 0;
+      outgoing[word] |= incoming[word];
     }
   }
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_store_data_wait_resolve(
@@ -382,11 +358,9 @@ iree_status_t loom_amdgpu_store_data_wait_resolve(
   if (state->schedule->cfg_graph.edge_count == 0) {
     return iree_ok_status();
   }
-  uint16_t* worklist = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(state->arena, state->schedule->block_count,
-                                sizeof(*worklist), (void**)&worklist));
-  loom_amdgpu_store_data_propagate(state, worklist);
+  IREE_RETURN_IF_ERROR(loom_cfg_dataflow_solve(&state->schedule->cfg_graph,
+                                               loom_amdgpu_store_data_transfer,
+                                               state, state->arena));
   loom_amdgpu_wait_state_t pending = {0};
   bool has_pending = false;
   iree_status_t status = iree_ok_status();

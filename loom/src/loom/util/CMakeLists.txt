@@ -485,6 +485,35 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    cfg_dataflow
+  HDRS
+    "cfg_dataflow.h"
+  SRCS
+    "cfg_dataflow.c"
+  DEPS
+    ::cfg_graph
+    iree::base
+    iree::base::internal::arena
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    cfg_dataflow_test
+  SRCS
+    "cfg_dataflow_test.cc"
+  DEPS
+    ::cfg_dataflow
+    ::cfg_graph
+    ::cfg_graph_test_util
+    iree::base
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     cfg_loop
   HDRS
     "cfg_loop.h"
