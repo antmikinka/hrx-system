@@ -35,7 +35,8 @@ enum {
   LOOM_OP_BUFFER_FILL = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 11),
   LOOM_OP_BUFFER_COMPARE = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 12),
   LOOM_OP_BUFFER_FENCE = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 13),
-  LOOM_OP_BUFFER_COUNT_ = 14,
+  LOOM_OP_BUFFER_FROM_ADDRESS = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 14),
+  LOOM_OP_BUFFER_COUNT_ = 15,
 };
 
 // LOOM_OP_BUFFER_ALLOCA: Create a fixed-frame scratch buffer root in an allocatable memory space. Each execution produces a distinct storage identity; identical allocas must not be commoned. The byte length is the requested physical byte count for the execution. Targets requiring a static frame reserve its proven finite non-negative maximum. base_alignment is the minimum byte alignment of the root storage base. Target lowering determines which allocatable spaces are legal for the containing program kind.
@@ -313,6 +314,30 @@ iree_status_t loom_buffer_fence_build(
     loom_atomic_ordering_t ordering,
     loom_location_id_t location,
     loom_op_t** out_op);
+
+// LOOM_OP_BUFFER_FROM_ADDRESS: Form a non-owning global buffer from a native 64-bit device address. The caller guarantees a live allocation of byte_length bytes at that address with base_alignment alignment for every access through the result. This operation does not allocate, retain, or grant noalias storage.
+// %root = buffer.from_address %address {byte_length = 262144, base_alignment = 16} : i64 -> buffer
+LOOM_DEFINE_ISA(loom_buffer_from_address_isa, LOOM_OP_BUFFER_FROM_ADDRESS)
+LOOM_DEFINE_OPERAND(loom_buffer_from_address_address, 0)
+LOOM_DEFINE_RESULT(loom_buffer_from_address_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_buffer_from_address_byte_length, 0)
+LOOM_DEFINE_ATTR_I64(loom_buffer_from_address_base_alignment, 1)
+iree_status_t loom_buffer_from_address_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t address,
+    int64_t byte_length,
+    int64_t base_alignment,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_buffer_from_address_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_buffer_from_address_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the buffer dialect.
 const loom_op_vtable_t* const* loom_buffer_dialect_vtables(

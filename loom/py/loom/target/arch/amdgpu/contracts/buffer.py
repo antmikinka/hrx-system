@@ -49,6 +49,11 @@ AMDGPU_BUFFER_CONTRACT_FRAGMENT = ContractFragment(
     public_header="loom/target/arch/amdgpu/contracts/buffer.h",
     cases=(
         ValueAliasRule(
+            source_op=buffer.buffer_from_address,
+            source=ValueRef.operand("address"),
+            result=ValueRef.result("result"),
+        ),
+        ValueAliasRule(
             source_op=buffer.buffer_view,
             source=ValueRef.operand("buffer"),
             result=ValueRef.result("result"),

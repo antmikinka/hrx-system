@@ -146,6 +146,31 @@ static iree_status_t loom_buffer_verify_memory_space_refinement(
       iree_make_cstring_view(expected));
 }
 
+iree_status_t loom_buffer_from_address_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  const loom_type_t type = loom_module_value_type(
+      module, loom_buffer_from_address_address(op));
+  if (!loom_type_is_scalar(type) ||
+      loom_type_element_type(type) != LOOM_SCALAR_TYPE_I64) {
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("address")), loom_param_type(type),
+        loom_param_string(IREE_SV("i64"))};
+    return loom_buffer_emit(emitter, op, LOOM_ERR_TYPE_003, params,
+                            IREE_ARRAYSIZE(params));
+  }
+  const int64_t bytes = loom_buffer_from_address_byte_length(op);
+  if (bytes <= 0)
+    return loom_buffer_emit_attribute_value_constraint(emitter, op,
+        IREE_SV("byte_length"), bytes, IREE_SV("positive byte length"));
+  const int64_t alignment = loom_buffer_from_address_base_alignment(op);
+  if (!iree_math_is_power_of_two_i64(alignment))
+    return loom_buffer_emit_attribute_value_constraint(emitter, op,
+        IREE_SV("base_alignment"), alignment,
+        IREE_SV("positive power-of-two byte alignment"));
+  return iree_ok_status();
+}
+
 iree_status_t loom_buffer_alloca_verify(const loom_module_t* module,
                                         const loom_op_t* op,
                                         iree_diagnostic_emitter_t emitter) {

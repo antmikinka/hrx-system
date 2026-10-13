@@ -30,6 +30,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/launch_config.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
@@ -271,6 +272,32 @@ static iree_status_t loom_low_lower_bind_identity_results(
   const loom_value_id_t* source_operands = loom_op_const_operands(source_op);
   const loom_value_id_t* source_results = loom_op_const_results(source_op);
   for (uint16_t i = 0; i < source_op->result_count; ++i) {
+    if (source_op->kind == LOOM_OP_INDEX_ASSUME &&
+        loom_low_lower_source_value_has_low_mapping(context,
+                                                    source_operands[i])) {
+      loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+          context, source_operands[i], &low_source));
+      const loom_type_t source_type =
+          loom_module_value_type(context->module, low_source);
+      loom_type_t result_type = loom_type_none();
+      IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
+          context, source_op, source_results[i], &result_type));
+      if (loom_low_type_is_register(source_type) &&
+          loom_low_type_is_register(result_type) &&
+          loom_low_register_type_unit_count(result_type) <
+              loom_low_register_type_unit_count(source_type)) {
+        // A range assertion can prove that an address fits fewer register
+        // units. Keep the low units instead of aliasing the wider producer.
+        loom_op_t* slice = NULL;
+        IREE_RETURN_IF_ERROR(loom_low_slice_build(
+            &context->builder, low_source, 0, result_type,
+            source_op->location, &slice));
+        IREE_RETURN_IF_ERROR(loom_low_lower_bind_value(
+            context, source_results[i], loom_low_slice_result(slice)));
+        continue;
+      }
+    }
     IREE_RETURN_IF_ERROR(loom_low_lower_bind_or_elide_alias(
         context, source_operands[i], source_results[i]));
   }

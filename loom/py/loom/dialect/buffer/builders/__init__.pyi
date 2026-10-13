@@ -154,3 +154,15 @@ class BufferBuilder(DialectBuilder):
         ordering: str,
         location_id: int | None = ...,
     ) -> None: ...
+    def from_address(
+        self,
+        *,
+        address: ValueRef,
+        byte_length: int,
+        base_alignment: int,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...

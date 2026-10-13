@@ -2335,6 +2335,10 @@ static bool loom_amdgpu_memory_access_select_address_form(
     loom_low_source_memory_operation_kind_t kind, bool allow_global_smem,
     loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  const loom_value_t* root = loom_module_value(
+      selection_context->module, access->source.root_value_id);
+  const bool borrowed_address = !loom_value_is_block_arg(root) &&
+      loom_buffer_from_address_isa(loom_value_def_op(root));
   const loom_amdgpu_memory_address_attempt_t* attempts =
       kAmdgpuGlobalAddressAttempts;
   iree_host_size_t attempt_count = IREE_ARRAYSIZE(kAmdgpuGlobalAddressAttempts);
@@ -2355,6 +2359,12 @@ static bool loom_amdgpu_memory_access_select_address_form(
     attempt_count = IREE_ARRAYSIZE(kAmdgpuDescriptorAddressAttempts);
   }
   for (iree_host_size_t i = 0; i < attempt_count; ++i) {
+    // A borrowed address can differ between lanes. It is not an ABI scalar
+    // buffer binding, so preserve the full address in vector registers.
+    if (borrowed_address &&
+        attempts[i].kind != LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_FLAT) {
+      continue;
+    }
     const loom_amdgpu_memory_address_attempt_result_t result =
         loom_amdgpu_memory_address_attempt_apply(
             &attempts[i], selection_context, kind, allow_global_smem, access,

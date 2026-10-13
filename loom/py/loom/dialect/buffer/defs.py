@@ -37,6 +37,7 @@ from loom.dsl import (
     ATTR_TYPE_I64_ARRAY,
     BUFFER,
     BYTE_PATTERN_SCALAR,
+    INTEGER,
     FACT_IDENTITY,
     I32,
     MEMORY_FENCE,
@@ -624,6 +625,42 @@ buffer_fence = Op(
 )
 
 # ============================================================================
+# buffer.from_address — borrowed global root from a native device address
+# ============================================================================
+
+buffer_from_address = Op(
+    name="buffer.from_address",
+    group=buffer_ops,
+    doc=(
+        "Form a non-owning global buffer from a native 64-bit device address. "
+        "The caller guarantees a live allocation of byte_length bytes at that "
+        "address with base_alignment alignment for every access through the "
+        "result. This operation does not allocate, retain, or grant noalias "
+        "storage."
+    ),
+    operands=[Operand("address", INTEGER, doc="Native i64 device address.")],
+    results=[Result("result", BUFFER, doc="Borrowed global storage root.")],
+    attrs=[
+        AttrDef("byte_length", ATTR_TYPE_I64),
+        AttrDef("base_alignment", ATTR_TYPE_I64),
+    ],
+    traits=[PURE],
+    verify="loom_buffer_from_address_verify",
+    facts="loom_buffer_from_address_facts",
+    format=[
+        Ref("address"),
+        AttrDict(),
+        COLON,
+        TypeOf("address"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%root = buffer.from_address %address {byte_length = 262144, base_alignment = 16} : i64 -> buffer",
+    ],
+)
+
+# ============================================================================
 # Registry
 # ============================================================================
 
@@ -642,4 +679,5 @@ ALL_BUFFER_OPS: tuple[Op, ...] = (
     buffer_fill,
     buffer_compare,
     buffer_fence,
+    buffer_from_address,
 )

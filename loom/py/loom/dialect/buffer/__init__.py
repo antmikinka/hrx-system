@@ -9,6 +9,7 @@
 from loom.dialect.buffer.defs import (
     ALL_BUFFER_OPS,
     buffer_alloca,
+    buffer_from_address,
     buffer_assume_memory_space,
     buffer_compare,
     buffer_copy,
@@ -28,6 +29,7 @@ __all__ = [
     "ALL_BUFFER_OPS",
     "MemorySpace",
     "buffer_alloca",
+    "buffer_from_address",
     "buffer_assume_memory_space",
     "buffer_compare",
     "buffer_copy",

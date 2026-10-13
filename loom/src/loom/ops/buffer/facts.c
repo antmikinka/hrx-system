@@ -297,6 +297,23 @@ iree_status_t loom_buffer_assume_same_root_facts(
                                                 &result_facts[0]);
 }
 
+iree_status_t loom_buffer_from_address_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)operand_facts;
+  loom_value_fact_buffer_reference_t reference =
+      loom_buffer_default_reference(loom_buffer_from_address_result(op));
+  const int64_t bytes = loom_buffer_from_address_byte_length(op);
+  reference.maximum_byte_extent = loom_value_facts_make(bytes, bytes, 1);
+  reference.minimum_alignment =
+      (uint64_t)loom_buffer_from_address_base_alignment(op);
+  reference.memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL;
+  return loom_value_facts_make_buffer_reference(context, reference,
+                                                &result_facts[0]);
+}
+
 iree_status_t loom_buffer_view_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,
                                      const loom_op_t* op,
