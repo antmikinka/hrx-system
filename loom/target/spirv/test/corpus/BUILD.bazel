@@ -589,6 +589,8 @@ _SPIRV_EXECUTION_ALLOWED_FAILURES = {
     "numeric/float/narrow_reduction.loom:@narrow_reduction_normal_values": "TARGET/003",
     "numeric/float/narrow_reduction.loom:@narrow_reduction_subnormal_values": "TARGET/003,EXPECT/002",
     "numeric/float/scalar_float64.loom:@scalar_float64_random_values": "TARGET/002",
+    "numeric/float/scalar_float64.loom:@scalar_float64_remainder_random_values": "EXPECT/002",
+    "numeric/float/scalar_float64.loom:@scalar_float64_remainder_special_values": "EXPECT/002",
     "numeric/float/scalar_float64.loom:@scalar_float64_special_values": "TARGET/002",
     "numeric/vector/conversion.loom:@wide_bfloat_values": "TARGET/003",
     "numeric/vector/f32.loom:@vector_bf16_origin_scale_values": "TARGET/003,EXPECT/002",
