@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
 loom_cc_library(
   NAME
     scenario_adapter
@@ -38,6 +39,7 @@ loom_cc_library(
     loom::tooling::execution::hal::testbench_actual
   PUBLIC
 )
+endif()
 
 if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
 iree_execution_test_suite(

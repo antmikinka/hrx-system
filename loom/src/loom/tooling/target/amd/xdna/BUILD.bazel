@@ -27,6 +27,7 @@ loom_cc_library(
     name = "scenario_adapter",
     srcs = ["scenario_adapter.c"],
     hdrs = ["scenario_adapter.h"],
+    target_compatible_with = _XDNA_COMPILE_COMPATIBLE_WITH,
     visibility = ["//loom/src/loom/tools/iree-test-loom:__pkg__"],
     deps = [
         "//loom/binding/c:interop",
