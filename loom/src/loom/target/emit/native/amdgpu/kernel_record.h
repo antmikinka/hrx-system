@@ -62,6 +62,8 @@ typedef struct loom_amdgpu_kernel_record_options_t {
   const loom_amdgpu_hal_kernel_abi_verify_result_t* abi_verify;
   // Optional preflight result captured before kernel record construction.
   const loom_amdgpu_native_preflight_t* preflight;
+  // Hardware allocation floor retained by final physical packet planning.
+  uint32_t minimum_vgpr_count;
 } loom_amdgpu_kernel_record_options_t;
 
 // Builds the shared emission record for one scheduled and allocated target-low

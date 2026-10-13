@@ -12,7 +12,7 @@ from loom.target.arch.amdgpu.descriptors import _REG_SGPR, _REG_VGPR
 from loom.target.arch.amdgpu.descriptors.api import (
     _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS,
 )
-from loom.target.low_descriptors import OperandRole, RegClassAlt
+from loom.target.low_descriptors import OperandAddressMapKind, OperandRole, RegClassAlt
 
 
 @pytest.mark.parametrize("target", _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS)
@@ -85,3 +85,33 @@ def test_unsigned_subtract_accepts_an_inline_lhs_on_every_family(target) -> None
     ) == ("dst", "rhs")
     assert descriptor.immediates[0].field_name == "imm32"
     assert descriptor.immediates[0].unsigned_max == 64
+
+
+@pytest.mark.parametrize("target", _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS)
+def test_wide_shifts_preserve_placement_and_require_a_representable_neighbor(
+    target,
+) -> None:
+    overlays = {
+        overlay.descriptor_key: overlay
+        for overlay in _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS[target].overlay_rows()
+    }
+    needs_neighbor = target.startswith(("cdna", "gfx9_4"))
+    for mnemonic in ("v_lshlrev_b64", "v_lshrrev_b64", "v_ashrrev_i64"):
+        descriptor = overlays[f"amdgpu.{mnemonic}"]
+        result, shift, value = (
+            operand.descriptor_operand for operand in descriptor.operands
+        )
+        assert result.unit_count == value.unit_count == 2
+        assert shift.unit_count == 1
+        assert shift.reg_alts == (RegClassAlt(_REG_SGPR), RegClassAlt(_REG_VGPR))
+        assert shift.addressable_unit_count == (255 if needs_neighbor else 0)
+        assert shift.address_map_kind is (
+            OperandAddressMapKind.LOW_SUBSET
+            if needs_neighbor
+            else OperandAddressMapKind.DIRECT
+        )
+        inline = overlays[f"amdgpu.{mnemonic}.src0_inline"]
+        assert tuple(operand.descriptor_operand for operand in inline.operands) == (
+            result,
+            value,
+        )

@@ -436,7 +436,12 @@ def _cdna_core_overlays(
         *_v_max_u32_overlays(),
         _v_readfirstlane_b32_overlay(),
         _v_readlane_b32_src1_inline_overlay(),
-        *_integer_bitwise_shift_overlays(include_vop3_literal_forms=False),
+        # CDNA2+ wide shifts read the count register's successor at allocation
+        # block boundaries. Final packet planning retains the allocation floor;
+        # v255 has no representable successor and cannot hold the count.
+        *_integer_bitwise_shift_overlays(
+            include_vop3_literal_forms=False, shift_b64_register_count=255
+        ),
         *_integer_bitwise_permute_overlays(include_vop3_literal_forms=False),
         *_v_binary_f32_overlays(),
         *_v_binary_f64_overlays(),

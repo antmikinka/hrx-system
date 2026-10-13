@@ -2194,7 +2194,16 @@ def _v_lshlrev_b32_vop3_immediate_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _v_shift_b64_overlay(mnemonic: str, semantic_tag: str) -> AmdgpuDescriptorOverlay:
+def _v_shift_b64_overlay(
+    mnemonic: str, semantic_tag: str, *, shift_register_count: int = 0
+) -> AmdgpuDescriptorOverlay:
+    shift = _sgpr_vgpr_operand("shift")
+    if shift_register_count:
+        shift = replace(
+            shift,
+            address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+            addressable_unit_count=shift_register_count,
+        )
     return AmdgpuDescriptorOverlay(
         descriptor_key=f"amdgpu.{mnemonic}",
         instruction_name=mnemonic.upper(),
@@ -2204,7 +2213,7 @@ def _v_shift_b64_overlay(mnemonic: str, semantic_tag: str) -> AmdgpuDescriptorOv
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result(units=2)),
-            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("shift")),
+            AmdgpuOperandOverlay("SRC0", shift),
             AmdgpuOperandOverlay("SRC1", _vgpr_operand("value", units=2)),
         ),
         operand_forms=(
@@ -2674,7 +2683,7 @@ def _v_ashrrev_i32_literal_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _integer_bitwise_shift_overlays(
-    *, include_vop3_literal_forms: bool = True
+    *, include_vop3_literal_forms: bool = True, shift_b64_register_count: int = 0
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_and_b32_overlay(),
@@ -2739,7 +2748,11 @@ def _integer_bitwise_shift_overlays(
                 ("v_ashrrev_i64", "integer.shr.s64"),
             )
             for overlay in (
-                _v_shift_b64_overlay(mnemonic, semantic_tag),
+                _v_shift_b64_overlay(
+                    mnemonic,
+                    semantic_tag,
+                    shift_register_count=shift_b64_register_count,
+                ),
                 _v_shift_b64_src0_inline_overlay(mnemonic, semantic_tag),
             )
         ),

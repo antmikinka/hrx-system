@@ -469,6 +469,9 @@ iree_status_t loom_amdgpu_kernel_record_build(
   if (entry_envelope->minimum_vgpr_count > next_free_vgpr) {
     next_free_vgpr = entry_envelope->minimum_vgpr_count;
   }
+  if (options->minimum_vgpr_count > next_free_vgpr) {
+    next_free_vgpr = options->minimum_vgpr_count;
+  }
 
   iree_string_view_t descriptor_symbol = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_concat3(

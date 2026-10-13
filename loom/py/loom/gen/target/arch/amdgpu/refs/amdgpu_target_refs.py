@@ -74,6 +74,7 @@ from loom.target.low_descriptors import (  # noqa: E402
     ImmediateFlag,
     ImmediateKind,
     InstructionClass,
+    OperandAddressMapKind,
     OperandFlag,
     OperandRole,
     Resource,
@@ -571,6 +572,19 @@ def _descriptor_trait_names(
         trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_WRITES_EXEC")
     if descriptor.semantic_tag in ("float.add.pk2.f32", "float.mul.pk2.f32", "float.fma.pk2.f32"):
         trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_PACKED_F32")
+    if descriptor.semantic_tag in ("integer.shl.u64", "integer.shr.u64", "integer.shr.s64"):
+        shift_operands = tuple(operand for operand in descriptor.operands if operand.field_name == "shift" and operand.addressable_unit_count == 255)
+        if shift_operands:
+            operands = tuple(operand for operand in descriptor.operands if operand.role == OperandRole.OPERAND and OperandFlag.IMPLICIT not in operand.flags)
+            if (
+                len(shift_operands) != 1
+                or len(operands) != 2
+                or operands[0] != shift_operands[0]
+                or shift_operands[0].unit_count != 1
+                or shift_operands[0].address_map_kind is not OperandAddressMapKind.LOW_SUBSET
+            ):
+                raise ValueError(f"CDNA wide shift count must be the first one-register operand: {descriptor.key}")
+            trait_names.append("LOOM_AMDGPU_DESCRIPTOR_TRAIT_SHIFT64_ALLOCATION")
     return tuple(trait_names)
 
 

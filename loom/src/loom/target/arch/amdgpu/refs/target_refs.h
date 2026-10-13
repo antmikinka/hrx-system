@@ -57,6 +57,9 @@ typedef enum loom_amdgpu_descriptor_trait_bit_e {
   // Packed F32 arithmetic spells input register pairs even when both result
   // lanes select the first dword. Physical read footprints remain independent.
   LOOM_AMDGPU_DESCRIPTOR_TRAIT_PACKED_F32 = 1u << 15,
+  // Wide shift operand zero needs its next VGPR allocated when the count
+  // occupies the last register of an eight-register allocation block.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_SHIFT64_ALLOCATION = 1u << 16,
 } loom_amdgpu_descriptor_trait_bit_t;
 typedef uint32_t loom_amdgpu_descriptor_traits_t;
 

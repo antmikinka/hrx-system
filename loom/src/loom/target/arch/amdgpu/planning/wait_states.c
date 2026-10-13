@@ -291,6 +291,8 @@ typedef struct loom_amdgpu_wait_state_builder_t {
   loom_amdgpu_wait_state_vgpr_t* vgprs;
   // Number of entries in |vgprs|.
   iree_host_size_t vgpr_count;
+  // Hardware allocation floor required by physical shift-count operands.
+  uint32_t minimum_vgpr_count;
   // Outstanding SGPR hazards across allocated and ABI-fixed locations.
   struct {
     // Dense allocated prefix followed by the descriptor's fixed-location range.
@@ -1583,6 +1585,18 @@ static iree_status_t loom_amdgpu_wait_state_packet_analyze(
       loom_amdgpu_descriptor_traits(descriptor_set, descriptor);
   out_info->descriptor_traits = descriptor_traits;
   if (iree_any_bit_set(descriptor_traits,
+                       LOOM_AMDGPU_DESCRIPTOR_TRAIT_SHIFT64_ALLOCATION)) {
+    const loom_low_allocation_assignment_t* count =
+        loom_low_packet_operand_assignment(builder->allocation, packet, 0);
+    if (count->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR &&
+        (count->location_base & 7u) == 7u) {
+      const uint32_t minimum_vgpr_count = count->location_base + 2;
+      if (minimum_vgpr_count > builder->minimum_vgpr_count) {
+        builder->minimum_vgpr_count = minimum_vgpr_count;
+      }
+    }
+  }
+  if (iree_any_bit_set(descriptor_traits,
                        LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_ALU)) {
     out_info->flags |= LOOM_AMDGPU_WAIT_STATE_PACKET_FLAG_USES_VECTOR_ALU;
   }
@@ -2347,6 +2361,7 @@ static void loom_amdgpu_wait_state_plan_publish(
       .hazard_plan = builder->hazard_plan,
       .states = builder->states,
       .state_count = builder->state_count,
+      .minimum_vgpr_count = builder->minimum_vgpr_count,
   };
   out_plan->hazard_plan.progress = &out_plan->progress;
 }

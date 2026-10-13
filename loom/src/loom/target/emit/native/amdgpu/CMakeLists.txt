@@ -175,6 +175,7 @@ loom_check_test_suite(
     "test/packet_json.loom-test"
     "test/permlane_swap.loom-test"
     "test/register_numbering.loom-test"
+    "test/shift_allocation.loom-test"
     "test/spill_lowering.loom-test"
     "test/structural_delay_alu.loom-test"
     "test/target_requirement.loom-test"
@@ -881,6 +882,50 @@ loom_cc_test(
     "iree-build-requirement=loom.emit.amdgpu"
   RESOURCE_GROUP
     gpu-device
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_IREE_HAL_DESCRIPTOR_SET_CDNA2_CORE)
+loom_test_module(
+  NAME
+    shift_allocation_execution_test_module
+  SRCS
+    "test/shift_allocation.loom"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_TARGET_AMDGPU_IREE_HAL_DESCRIPTOR_SET_CDNA2_CORE)
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_BUILD AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+loom_execution_test(
+  NAME
+    shift_allocation_execution_test_execute_amdgpu_hardware_test
+  MODULE
+    "::shift_allocation_execution_test_module"
+  RUNNER_ARGS
+    "--device=amdgpu"
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.emit.amdgpu"
+    "iree-build-requirement=loom.execute.iree_hal"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+    "loom-execution-profile=amdgpu_hardware"
+    "loom-target-family=amdgpu"
+    "loom-target-class=gpu"
+    "loom-executor=hardware"
+  RESOURCE_GROUP
+    "gpu-device"
+)
+endif()
+
+loom_check_compile_tests(
+  NAME
+    "shift_allocation_execution_test"
+  SRC
+    "::shift_allocation_execution_test_module"
+  TARGETS
+    loom::target::amdgpu::gfx90a
 )
 endif()
 

@@ -38,6 +38,7 @@ from loom.target.low_descriptors import (
     LatencyKind,
     ModelQuality,
     Operand,
+    OperandAddressMapKind,
     OperandFlag,
     OperandRole,
     RegClassAlt,
@@ -386,6 +387,25 @@ def test_descriptor_trait_names_classify_packed_f32_pair_spelling() -> None:
         context = amdgpu_target_refs._descriptor_trait_context(descriptor_set)
         traits = amdgpu_target_refs._descriptor_trait_names(context, descriptor_set.descriptors[0])
         assert ("LOOM_AMDGPU_DESCRIPTOR_TRAIT_PACKED_F32" in traits) == expected
+
+
+def test_wide_shift_allocation_trait_requires_the_first_count_operand() -> None:
+    count = Operand("shift", OperandRole.OPERAND, (RegClassAlt("amdgpu.vgpr"),), address_map_kind=OperandAddressMapKind.LOW_SUBSET, addressable_unit_count=255)
+    value = Operand("value", OperandRole.OPERAND, (RegClassAlt("amdgpu.vgpr"),), unit_count=2)
+    for semantic_tag in ("integer.shl.u64", "integer.shr.u64", "integer.shr.s64"):
+        for operands, expected in (
+            ((count, value), True),
+            ((replace(count, address_map_kind=OperandAddressMapKind.DIRECT, addressable_unit_count=0), value), False),
+            ((value,), False),
+        ):
+            descriptor = _descriptor("amdgpu.shift", semantic_tag=semantic_tag, operands=operands)
+            context = amdgpu_target_refs._descriptor_trait_context(_descriptor_set(descriptor))
+            assert ("LOOM_AMDGPU_DESCRIPTOR_TRAIT_SHIFT64_ALLOCATION" in amdgpu_target_refs._descriptor_trait_names(context, descriptor)) == expected
+        for operands in ((value, count), (replace(count, unit_count=2), value)):
+            descriptor = _descriptor("amdgpu.shift", semantic_tag=semantic_tag, operands=operands)
+            context = amdgpu_target_refs._descriptor_trait_context(_descriptor_set(descriptor))
+            with _raises_value_error("first one-register operand"):
+                amdgpu_target_refs._descriptor_trait_names(context, descriptor)
 
 
 def test_descriptor_trait_names_classify_permlane_semantics() -> None:

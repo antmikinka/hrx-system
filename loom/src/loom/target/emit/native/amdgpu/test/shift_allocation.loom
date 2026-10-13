@@ -1,0 +1,82 @@
+// Runtime scalar inputs keep the locked copies live until all three shifts.
+// Their VGPR count operand occupies the end of an allocation block.
+amdgpu.target<gfx90a> @shift_target
+
+low.func.def schedule(locked) target<amdgpu.cdna2.core>(@shift_target) @shift_boundary(%a: reg<amdgpu.sgpr x2>, %b: reg<amdgpu.sgpr x2>, %c: reg<amdgpu.sgpr x2>, %extra_uniform: reg<amdgpu.sgpr>, %uniform_count: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) asm {
+  %a0_uniform = slice %a[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %a0 = v_mov_b32_copy %a0_uniform
+  %a1_uniform = slice %a[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %a1 = v_mov_b32_copy %a1_uniform
+  %b0_uniform = slice %b[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %b0 = v_mov_b32_copy %b0_uniform
+  %b1_uniform = slice %b[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %b1 = v_mov_b32_copy %b1_uniform
+  %c0_uniform = slice %c[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %c0 = v_mov_b32_copy %c0_uniform
+  %c1_uniform = slice %c[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %c1 = v_mov_b32_copy %c1_uniform
+  %extra = v_mov_b32_copy %extra_uniform
+  %count = v_mov_b32_copy %uniform_count
+  %left = concat(%a0, %a1) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %right = concat(%b0, %b1) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %signed = concat(%c0, %c1) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %shifted_left = v_lshlrev_b64 %count, %left
+  %shifted_right = v_lshrrev_b64 %count, %right
+  %shifted_signed = v_ashrrev_i64 %count, %signed
+  %low = slice %shifted_left[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %high = slice %shifted_left[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %mixed = v_xor_b32 %extra, %low
+  %result = concat(%mixed, %high) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result, %shifted_right, %shifted_signed
+}
+
+kernel.def target(@shift_target) @shift_register_boundary() {
+  %unit_extent = index.constant 1 : index
+  %groups = index.constant 64 : index
+  kernel.launch.config workgroups(%groups, %unit_extent, %unit_extent) workgroup_size(%unit_extent, %unit_extent, %unit_extent) : index
+} launch(%a: i64, %b: i64, %c: i64, %extra: i32, %output: buffer) {
+  %group = kernel.workgroup.id<x> : index
+  %count = index.cast %group : index to i32
+  %left, %logical, %signed = low.invoke @shift_boundary(%a, %b, %c, %extra, %count) : (i64, i64, i64, i32, i32) -> (vector<1xi64>, vector<1xi64>, vector<1xi64>)
+  %base = index.constant 0 : offset
+  %results = buffer.view %output[%base] : buffer -> view<3x64xi64>
+  vector.store %left, %results[0, %group] : vector<1xi64>, view<3x64xi64>
+  vector.store %logical, %results[1, %group] : vector<1xi64>, view<3x64xi64>
+  vector.store %signed, %results[2, %group] : vector<1xi64>, view<3x64xi64>
+  kernel.return
+}
+
+func.def @shift_register_boundary_oracle(%a: i64, %b: i64, %c: i64, %extra: i32, %output: buffer) {
+  %base = index.constant 0 : offset
+  %results = buffer.view %output[%base] : buffer -> view<3x64xi64>
+  %begin = index.constant 0 : index
+  %end = index.constant 64 : index
+  %step = index.constant 1 : index
+  %extra_bits = scalar.extui %extra : i32 to i64
+  scf.for %group = [%begin to %end step %step] {
+    %count = index.cast %group : index to i64
+    %shifted = scalar.shli %a, %count : i64
+    %left = scalar.xori %shifted, %extra_bits : i64
+    %logical = scalar.shrui %b, %count : i64
+    %signed = scalar.shrsi %c, %count : i64
+    view.store %left, %results[0, %group] : i64, view<3x64xi64>
+    view.store %logical, %results[1, %group] : i64, view<3x64xi64>
+    view.store %signed, %results[2, %group] : i64, view<3x64xi64>
+  }
+  func.return
+}
+
+check.scenario @wide_shift_register_boundary {
+  check.requires<hal.amdgpu.descriptor_set> {descriptor_set = "amdgpu.cdna2.core"}
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %a = check.literal value(81985529216486895) : i64
+    %b = check.literal value(-81985529216486896) : i64
+    %c = check.literal value(-8526495038839145832) : i64
+    %extra = check.literal value(7) : i32
+    %output = check.generate.fill value(0) : tensor<3x64xi64>
+    check.compare<@shift_register_boundary, @shift_register_boundary_oracle>(%a, %b, %c, %extra, %output) : (i64, i64, i64, i32, tensor<3x64xi64>) -> () {
+      check.expect.bitwise actual(%output) expected(%output) : tensor<3x64xi64>
+    }
+  }
+  check.return
+}

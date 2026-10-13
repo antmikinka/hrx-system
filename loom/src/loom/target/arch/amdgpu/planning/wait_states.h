@@ -144,6 +144,8 @@ typedef struct loom_amdgpu_wait_state_plan_t {
   const loom_amdgpu_wait_state_t* states;
   // Number of wait-state records.
   iree_host_size_t state_count;
+  // Hardware allocation floor needed by final physical operand hazards.
+  uint32_t minimum_vgpr_count;
 } loom_amdgpu_wait_state_plan_t;
 
 struct loom_amdgpu_processor_properties_t;
