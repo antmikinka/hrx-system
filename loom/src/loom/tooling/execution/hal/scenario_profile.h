@@ -25,8 +25,8 @@ typedef struct loom_run_hal_testbench_scenario_profile_t {
   // Stable profile name surfaced in scenario results and diagnostics.
   iree_string_view_t name;
   // Provider options copied into each independently prepared HAL product. The
-  // module and kernel launch may be replaced by a target-only function adapter
-  // during product preparation.
+  // module and invocation may be replaced by a target-owned executable
+  // derivative during product preparation.
   loom_run_hal_testbench_actual_provider_options_t provider_options;
   // Exact source snapshots used by tooling-generated diagnostics.
   const loom_source_table_resolver_t* source_table;
@@ -44,14 +44,14 @@ void loom_run_hal_testbench_scenario_profile_initialize(
 
 // Returns the external execution profile backed by |profile|.
 //
-// Product preparation compiles and loads one ordinary kernel artifact before
-// any trial-local values exist. An ordinary void function with scalar and
-// buffer arguments is privately adapted to a fixed 1x1 kernel in the target
-// product; the authored module remains unchanged for oracle execution. Product
-// execution records every call in a bounded batch into one command sequence,
-// stages each distinct host allocation once while preserving aliases, submits
-// once, and reads completed state back. Product benchmarking reuses that same
-// command sequence after target-local staging and omits readback.
+// Product preparation compiles and loads one executable before any trial-local
+// values exist. An ordinary void function is privately adapted to a fixed 1x1
+// kernel unless the selected target route supplies its own executable
+// derivative; the authored module remains unchanged for oracle execution.
+// Product execution records every call in a bounded batch into one command
+// sequence, stages each distinct host allocation once while preserving aliases,
+// submits once, and reads completed state back. Product benchmarking reuses
+// that same command sequence after target-local staging and omits readback.
 loom_testbench_execution_profile_t
 loom_run_hal_testbench_scenario_execution_profile(
     loom_run_hal_testbench_scenario_profile_t* profile);

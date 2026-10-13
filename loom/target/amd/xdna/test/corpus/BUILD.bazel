@@ -1,0 +1,28 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:defs.bzl", "loom_corpus_test")
+load("//loom/src/loom/test/corpus:catalog.bzl", "LOOM_CORPUS")
+load("//loom/target/amd/xdna:execution_profiles.bzl", "XDNA_HARDWARE_PROFILE")
+
+package(default_visibility = ["//visibility:public"])
+
+loom_corpus_test(
+    name = "execution",
+    catalog = LOOM_CORPUS,
+    execution_profiles = [XDNA_HARDWARE_PROFILE],
+    profile_sources = {
+        XDNA_HARDWARE_PROFILE.name: ["numeric/vector/constants.loom"],
+    },
+    xfails = {
+        XDNA_HARDWARE_PROFILE.name: {
+            "numeric/vector/constants.loom:@narrow_vector_constant_bits": "XDNA/051",
+            "numeric/vector/constants.loom:@vector_coordinate_constant_values": "TARGET/094",
+            "numeric/vector/constants.loom:@vector_f64_constant_selection_values": "TARGET/094",
+            "numeric/vector/constants.loom:@vector_predicate_constant_values": "TARGET/094",
+        },
+    },
+)

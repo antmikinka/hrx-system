@@ -58,6 +58,7 @@ _XDNA_TARGET_COPTS = iree_select({
 _XDNA_TARGET_DEPS = iree_select({
     "//loom/config/execute:xdna_hal": [
         "//loom/binding/c/target/amd/xdna:iree_hal",
+        "//loom/src/loom/tooling/target/amd/xdna:scenario_adapter",
     ],
     "//conditions:default": [],
 })

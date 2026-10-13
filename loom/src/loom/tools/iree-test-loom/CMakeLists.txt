@@ -102,6 +102,7 @@ if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE
 endif()
 if(LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_XDNA)
   list(APPEND _iree_test_loom_platform_deps loom::binding::c::target::amd::xdna::iree_hal)
+  list(APPEND _iree_test_loom_platform_deps loom::tooling::target::amd::xdna::scenario_adapter)
 endif()
 if(LOOM_TARGET_ARCH_VM)
   list(APPEND _iree_test_loom_platform_deps loom::tooling::target::vm::testbench)

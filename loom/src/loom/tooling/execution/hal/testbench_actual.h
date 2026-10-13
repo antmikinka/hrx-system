@@ -33,12 +33,44 @@
 extern "C" {
 #endif
 
+// Result of attempting to adapt an ordinary function scenario after target
+// selection.
+typedef enum loom_run_hal_target_function_adaptation_e {
+  // The target execution profile cannot represent this invocation yet.
+  LOOM_RUN_HAL_TARGET_FUNCTION_ADAPTATION_UNSUPPORTED = 0,
+  // The adapter returned a complete executable derivative.
+  LOOM_RUN_HAL_TARGET_FUNCTION_ADAPTATION_ADAPTED = 1,
+} loom_run_hal_target_function_adaptation_t;
+
+// Builds a target-owned executable derivative for one ordinary function
+// scenario after live-device target selection.
+//
+// The adapter clones |source_module| through |compilation| and returns one
+// invocation whose native IR is owned by |out_module|. It must not inspect
+// trial-local values or specialize the derivative on generated input bytes.
+// The derivative must not add HAL runtime feature requirements beyond those
+// already declared by |source_module| and the active sanitizer policy.
+// Unsupported invocation shapes return OK with |out_adaptation| set to
+// UNSUPPORTED; statuses represent failures while constructing an otherwise
+// supported derivative.
+typedef iree_status_t(IREE_API_PTR* loom_run_hal_target_function_adapter_fn_t)(
+    const loom_testbench_compilation_t* compilation,
+    const loomc_module_t* source_module,
+    const loom_testbench_invocation_plan_t* source_invocation,
+    const loom_target_profile_t* target_profile,
+    iree_allocator_t host_allocator,
+    loom_run_hal_target_function_adaptation_t* out_adaptation,
+    loomc_module_t** out_module,
+    loom_testbench_invocation_plan_t* out_invocation);
+
 // Connects one command-line HAL driver to its public compiler target adapter.
 typedef struct loom_run_hal_target_route_t {
   // Canonical IREE HAL driver name accepted in a device URI.
   iree_string_view_t driver_name;
   // Public adapter that selects a compiler profile from the live device.
   const loomc_iree_hal_target_provider_t* provider;
+  // Optional target-owned adapter for ordinary function scenario subjects.
+  loom_run_hal_target_function_adapter_fn_t function_adapter;
 } loom_run_hal_target_route_t;
 
 typedef struct loom_run_hal_testbench_context_t {

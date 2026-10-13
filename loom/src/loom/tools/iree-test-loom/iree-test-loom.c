@@ -49,6 +49,7 @@
 #include "loomc/target/spirv/iree_hal.h"
 #endif  // IREE_TEST_LOOM_HAVE_SPIRV
 #if IREE_TEST_LOOM_HAVE_XDNA
+#include "loom/tooling/target/amd/xdna/scenario_adapter.h"
 #include "loomc/target/amd/xdna/iree_hal.h"
 #endif  // IREE_TEST_LOOM_HAVE_XDNA
 #if IREE_TEST_LOOM_HAVE_TASK
@@ -141,6 +142,7 @@ int main(int argc, char** argv) {
       {
           .driver_name = IREE_SV("xdna"),
           .provider = loomc_xdna_iree_hal_target_provider(),
+          .function_adapter = loom_xdna_hal_testbench_adapt_scenario_function,
       },
 #endif  // IREE_TEST_LOOM_HAVE_XDNA
 #if IREE_TEST_LOOM_HAVE_TASK

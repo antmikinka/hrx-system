@@ -8,6 +8,7 @@ load("//build_tools/bazel:test_resources.bzl", "GPU_DEVICE_RESOURCE_GROUP")
 load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
     "loom_config_compatible_with",
 )
 load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test")
@@ -21,6 +22,34 @@ package(
 _XDNA_COMPILE_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/target:xdna_artifacts",
 ])
+
+loom_cc_library(
+    name = "scenario_adapter",
+    srcs = ["scenario_adapter.c"],
+    hdrs = ["scenario_adapter.h"],
+    visibility = ["//loom/src/loom/tools/iree-test-loom:__pkg__"],
+    deps = [
+        "//loom/binding/c:interop",
+        "//loom/binding/c:loomc",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:cache",
+        "//loom/src/loom/ops:type_registry",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/channel",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/pipeline",
+        "//loom/src/loom/target:profile",
+        "//loom/src/loom/target:resolved_target",
+        "//loom/src/loom/target/arch/amd/xdna:array_facts",
+        "//loom/src/loom/target/arch/amd/xdna:device_profile",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:provider",
+        "//loom/src/loom/target/arch/amd/xdna/aie2p:target_profile",
+        "//loom/src/loom/tooling/execution/hal:testbench_actual",
+        "//runtime/src/iree/base",
+    ],
+)
 
 iree_execution_test_suite(
     name = "loom_opt_trace",

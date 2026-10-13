@@ -1615,6 +1615,29 @@ ERR_TARGET_093 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_094: Target execution profile cannot adapt a scenario subject.
+ERR_TARGET_094 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=94,
+    severity=Severity.ERROR,
+    summary="Target execution profile cannot adapt a scenario subject.",
+    message=(
+        "target execution profile '{profile}' cannot adapt a scenario subject "
+        "with {workload_count} workload parameter(s), {input_count} input(s), "
+        "and {result_count} result(s)"
+    ),
+    params=(
+        ErrorParam("profile", ParamKind.STRING),
+        ErrorParam("workload_count", ParamKind.U64),
+        ErrorParam("input_count", ParamKind.U64),
+        ErrorParam("result_count", ParamKind.U64),
+    ),
+    fix_hint=(
+        "Use a subject shape supported by '{profile}' or extend its target-owned "
+        "scenario adapter."
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1693,4 +1716,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_091,
     ERR_TARGET_092,
     ERR_TARGET_093,
+    ERR_TARGET_094,
 )

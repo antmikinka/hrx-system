@@ -27,7 +27,7 @@ typedef struct loom_run_hal_testbench_scenario_product_t {
   const loom_testbench_invocation_plan_t* subject;
   // Target-only module clone containing a generated function adapter.
   loomc_module_t* adapted_module;
-  // Synthetic kernel invocation owned with |adapted_module|.
+  // Synthetic executable invocation owned with |adapted_module|.
   loom_testbench_invocation_plan_t adapted_invocation;
   // Eagerly compiled HAL dispatch product.
   loom_run_hal_testbench_actual_provider_t provider;
@@ -56,13 +56,9 @@ typedef struct loom_run_hal_testbench_scenario_batch_t {
   loom_run_hal_testbench_staging_t staging;
 } loom_run_hal_testbench_scenario_batch_t;
 
-static iree_status_t loom_run_hal_testbench_scenario_emit_unsupported_results(
+static loom_source_range_t loom_run_hal_testbench_scenario_source_location(
     const loom_run_hal_testbench_scenario_profile_t* profile,
     const loom_testbench_invocation_plan_t* invocation) {
-  const loom_diagnostic_param_t params[] = {
-      loom_param_string(profile->name),
-      loom_param_u32((uint32_t)invocation->result_count),
-  };
   loom_source_range_t source_location = {
       .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
   };
@@ -74,6 +70,18 @@ static iree_status_t loom_run_hal_testbench_scenario_emit_unsupported_results(
         },
         invocation->module, invocation->op->location, &source_location);
   }
+  return source_location;
+}
+
+static iree_status_t loom_run_hal_testbench_scenario_emit_unsupported_results(
+    const loom_run_hal_testbench_scenario_profile_t* profile,
+    const loom_testbench_invocation_plan_t* invocation) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(profile->name),
+      loom_param_u32((uint32_t)invocation->result_count),
+  };
+  const loom_source_range_t source_location =
+      loom_run_hal_testbench_scenario_source_location(profile, invocation);
   const loom_diagnostic_t diagnostic = {
       .severity = LOOM_DIAGNOSTIC_ERROR,
       .error = LOOM_ERR_TARGET_093,
@@ -88,6 +96,33 @@ static iree_status_t loom_run_hal_testbench_scenario_emit_unsupported_results(
   return iree_make_status(
       IREE_STATUS_FAILED_PRECONDITION,
       "HAL scenario profile cannot transport invocation results");
+}
+
+static iree_status_t loom_run_hal_testbench_scenario_emit_unsupported_adapter(
+    const loom_run_hal_testbench_scenario_profile_t* profile,
+    const loom_testbench_invocation_plan_t* invocation) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(profile->name),
+      loom_param_u64(invocation->workload_count),
+      loom_param_u64(invocation->input_count),
+      loom_param_u64(invocation->result_count),
+  };
+  const loom_source_range_t source_location =
+      loom_run_hal_testbench_scenario_source_location(profile, invocation);
+  const loom_diagnostic_t diagnostic = {
+      .severity = LOOM_DIAGNOSTIC_ERROR,
+      .error = LOOM_ERR_TARGET_094,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+      .emitter = LOOM_EMITTER_BUILDER,
+      .origin = source_location,
+      .source_location = source_location,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_diagnostic_emit(&profile->diagnostic_sink, &diagnostic));
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "HAL target route cannot adapt the scenario function subject");
 }
 
 static iree_status_t loom_run_hal_testbench_scenario_batch_deinitialize(
@@ -632,24 +667,53 @@ static iree_status_t loom_run_hal_testbench_scenario_product_prepare(
   };
   loom_run_hal_testbench_actual_provider_options_t provider_options =
       profile->provider_options;
+  provider_options.invocation = invocation;
+  loom_run_hal_testbench_actual_provider_initialize(&provider_options,
+                                                    &product->provider);
   iree_status_t status = iree_ok_status();
   if (invocation->kind == LOOM_TESTBENCH_INVOCATION_FUNCTION_CALL) {
-    status = loom_run_hal_testbench_scenario_build_function_adapter(
-        product, &provider_options, invocation);
-    if (iree_status_is_ok(status)) {
-      provider_options.module = product->adapted_module;
-      provider_options.native_module = product->adapted_invocation.module;
-      provider_options.invocation = &product->adapted_invocation;
+    status = loom_run_hal_testbench_actual_provider_select_target(
+        &product->provider);
+    if (iree_status_is_ok(status) && product->provider.compile_rejected) {
+      status = iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "HAL scenario product target selection rejected with '%.*s'",
+          (int)product->provider.compile_failure_kind.size,
+          product->provider.compile_failure_kind.data);
     }
-  } else {
-    provider_options.invocation = invocation;
+    const loom_run_hal_target_route_t* route =
+        product->provider.context->selected_target_route;
+    if (iree_status_is_ok(status) && route->function_adapter != NULL) {
+      loom_run_hal_target_function_adaptation_t adaptation =
+          LOOM_RUN_HAL_TARGET_FUNCTION_ADAPTATION_UNSUPPORTED;
+      status = route->function_adapter(
+          provider_options.compilation, provider_options.module, invocation,
+          loomc_target_profile_get_interop_view(
+              product->provider.selected_target_profile),
+          host_allocator, &adaptation, &product->adapted_module,
+          &product->adapted_invocation);
+      if (iree_status_is_ok(status) &&
+          adaptation == LOOM_RUN_HAL_TARGET_FUNCTION_ADAPTATION_UNSUPPORTED) {
+        status = loom_run_hal_testbench_scenario_emit_unsupported_adapter(
+            profile, invocation);
+      }
+      IREE_ASSERT(!iree_status_is_ok(status) ||
+                  adaptation ==
+                      LOOM_RUN_HAL_TARGET_FUNCTION_ADAPTATION_ADAPTED);
+    } else if (iree_status_is_ok(status)) {
+      status = loom_run_hal_testbench_scenario_build_function_adapter(
+          product, &provider_options, invocation);
+    }
+    if (iree_status_is_ok(status)) {
+      product->provider.module = product->adapted_module;
+      product->provider.native_module = product->adapted_invocation.module;
+      product->provider.invocation = &product->adapted_invocation;
+    }
   }
   if (!iree_status_is_ok(status)) {
     loom_run_hal_testbench_scenario_product_destroy(product);
     return status;
   }
-  loom_run_hal_testbench_actual_provider_initialize(&provider_options,
-                                                    &product->provider);
   status = loom_run_hal_testbench_actual_provider_compile(&product->provider);
   if (iree_status_is_ok(status) && product->provider.compile_rejected) {
     status = iree_make_status(

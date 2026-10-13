@@ -9,6 +9,36 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    scenario_adapter
+  HDRS
+    "scenario_adapter.h"
+  SRCS
+    "scenario_adapter.c"
+  DEPS
+    iree::base
+    loom::binding::c::interop
+    loom::binding::c::loomc
+    loom::ir
+    loom::ops::buffer
+    loom::ops::cache
+    loom::ops::channel
+    loom::ops::func
+    loom::ops::index
+    loom::ops::kernel
+    loom::ops::pipeline
+    loom::ops::type_registry
+    loom::target::arch::amd::xdna::aie2p::provider
+    loom::target::arch::amd::xdna::aie2p::target_profile
+    loom::target::arch::amd::xdna::array_facts
+    loom::target::arch::amd::xdna::device_profile
+    loom::target::profile
+    loom::target::resolved_target
+    loom::tooling::execution::hal::testbench_actual
+  PUBLIC
+)
+
 if(LOOM_BUILD AND LOOM_TARGET_ARCH_XDNA AND LOOM_EMIT_XDNA)
 iree_execution_test_suite(
   NAME
