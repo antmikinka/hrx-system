@@ -87,6 +87,20 @@ static iree_status_t loom_aie2p_native_address(
       &context->address_type, out_value);
 }
 
+static iree_status_t loom_aie2p_native_address_helper(
+    loom_aie2p_native_context_t* context, uint32_t address,
+    loom_symbol_ref_t* out_symbol) {
+  loom_builder_t builder;
+  loom_op_t* function;
+  IREE_RETURN_IF_ERROR(loom_aie2p_worker_helper(
+      &context->code, NULL, 0, &context->code.address_type, 1, &builder,
+      out_symbol, &function));
+  loom_value_id_t result;
+  IREE_RETURN_IF_ERROR(
+      loom_aie2p_native_address(&context->code, &builder, address, &result));
+  return loom_aie2p_worker_return(&builder, &result, 1);
+}
+
 static iree_status_t loom_aie2p_native_lock_helper(
     loom_aie2p_worker_builder_t* context, uint32_t descriptor,
     uint16_t selector, int32_t delta, loom_symbol_ref_t* out_symbol) {
@@ -110,17 +124,32 @@ static iree_status_t loom_aie2p_native_endpoint(
                                              .publish = loom_symbol_ref_null(),
                                              .release = loom_symbol_ref_null(),
                                              .alignment = access->alignment};
-  const uint32_t address = access->address;
-  loom_aie2p_worker_builder_t* code = &context->code;
-  loom_builder_t builder;
-  loom_op_t* function;
-  IREE_RETURN_IF_ERROR(
-      loom_aie2p_worker_helper(code, NULL, 0, &code->address_type, 1, &builder,
-                               &endpoint->base, &function));
-  loom_value_id_t base;
-  IREE_RETURN_IF_ERROR(
-      loom_aie2p_native_address(code, &builder, address, &base));
-  return loom_aie2p_worker_return(&builder, &base, 1);
+  return loom_aie2p_native_address_helper(context, access->address,
+                                          &endpoint->base);
+}
+
+static iree_status_t loom_aie2p_native_materialize_buffer_accesses(
+    loom_aie2p_native_context_t* context, loom_rewriter_t* rewriter,
+    const loom_aie2p_native_worker_t* worker) {
+  const loom_type_t buffer_type = loom_type_buffer();
+  for (iree_host_size_t i = 0; i < worker->buffers.count; ++i) {
+    const loom_aie2p_native_buffer_access_t* access =
+        &worker->buffers.accesses[i];
+    loom_symbol_ref_t helper;
+    IREE_RETURN_IF_ERROR(
+        loom_aie2p_native_address_helper(context, access->address, &helper));
+
+    loom_value_id_t buffer;
+    IREE_RETURN_IF_ERROR(loom_aie2p_native_invoke(
+        &rewriter->builder, helper, NULL, 0, &buffer_type, &buffer));
+    loom_op_t* aligned;
+    IREE_RETURN_IF_ERROR(loom_buffer_assume_alignment_build(
+        &rewriter->builder, &buffer, 1, access->alignment, &buffer_type, 1,
+        LOOM_LOCATION_UNKNOWN, &aligned));
+    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_with(
+        rewriter, access->argument, loom_op_results(aligned)[0]));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_aie2p_native_channel_action(
@@ -319,6 +348,8 @@ iree_status_t loom_aie2p_native_emit_worker(
   loom_block_t* entry =
       loom_region_entry_block(loom_func_like_body(source->function));
   loom_builder_set_before(&rewriter->builder, entry->first_op);
+  IREE_RETURN_IF_ERROR(
+      loom_aie2p_native_materialize_buffer_accesses(context, rewriter, worker));
   loom_op_t* origin;
   IREE_RETURN_IF_ERROR(
       loom_index_constant_build(&rewriter->builder, loom_attr_i64(0),

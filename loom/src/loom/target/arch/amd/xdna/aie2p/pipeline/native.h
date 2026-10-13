@@ -65,6 +65,16 @@ typedef struct loom_aie2p_native_channel_access_t {
   } locks;
 } loom_aie2p_native_channel_access_t;
 
+// One worker formal bound to a pipeline-owned local allocation.
+typedef struct loom_aie2p_native_buffer_access_t {
+  // Worker entry argument whose uses consume this address.
+  loom_value_id_t argument;
+  // Allocation base load address as seen by this worker.
+  uint32_t address;
+  // Minimum alignment guaranteed for the allocation base.
+  uint64_t alignment;
+} loom_aie2p_native_buffer_access_t;
+
 // Explicit caller buffer contract, shared by every borrowing DMA operation.
 typedef struct loom_aie2p_native_binding_t {
   // Original entry argument identity.
@@ -205,6 +215,13 @@ typedef struct loom_aie2p_native_worker_t {
   uint16_t completion_lock;
   // Worker-visible selector of its completion semaphore.
   uint16_t completion_selector;
+  // Pipeline-owned buffer captures selected for this worker.
+  struct {
+    // Access records in worker argument order.
+    loom_aie2p_native_buffer_access_t* accesses;
+    // Number of retained buffer accesses.
+    iree_host_size_t count;
+  } buffers;
   // Admitted channel access windows in private cursor-state order.
   struct {
     // Access records owned by this worker occurrence.

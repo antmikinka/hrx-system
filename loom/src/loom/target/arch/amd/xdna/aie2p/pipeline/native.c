@@ -191,6 +191,63 @@ static iree_status_t loom_aie2p_native_select_channel_accesses(
   return iree_ok_status();
 }
 
+static iree_status_t loom_aie2p_native_select_buffer_accesses(
+    loom_aie2p_native_context_t* context,
+    const loom_pipeline_realization_t* realization,
+    const loom_pipeline_worker_t* source, loom_aie2p_native_worker_t* worker) {
+  uint16_t argument_count = 0;
+  const loom_value_id_t* arguments =
+      loom_func_like_arg_ids(source->function, &argument_count);
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      context->pass->arena, argument_count, sizeof(*worker->buffers.accesses),
+      (void**)&worker->buffers.accesses));
+  for (uint16_t i = 0; i < argument_count; ++i) {
+    const loom_value_id_t argument = arguments[i];
+    if (!loom_type_is_buffer(
+            loom_module_value_type(context->code.module, argument)) ||
+        !loom_module_value_has_uses(context->code.module, argument)) {
+      continue;
+    }
+    loom_value_fact_buffer_reference_t reference;
+    if (!loom_value_facts_query_buffer_reference(
+            &source->facts.context,
+            loom_value_fact_table_lookup(&source->facts, argument),
+            &reference)) {
+      return loom_aie2p_native_reject(
+          context, source->source->call,
+          IREE_SV("a resolved storage root for each core buffer capture"));
+    }
+    const loom_value_id_t root =
+        loom_value_fact_buffer_reference_resolve_root_value(reference,
+                                                            argument);
+    if (reference.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+      continue;
+    }
+    const loom_pipeline_resource_allocation_t* allocation =
+        loom_pipeline_resources_lookup_allocation(&realization->resources,
+                                                  root);
+    if (!allocation || allocation->byte_length == 0 ||
+        allocation->byte_offset > UINT32_MAX ||
+        allocation->byte_length > UINT32_MAX) {
+      return loom_aie2p_native_reject(
+          context, source->source->call,
+          IREE_SV("an invocation-owned finite local allocation for each core "
+                  "buffer capture"));
+    }
+    const loom_xdna_tile_coordinate_t owner =
+        context->pool_tiles[allocation->pool_index]->coordinate;
+    loom_aie2p_native_buffer_access_t* access =
+        &worker->buffers.accesses[worker->buffers.count++];
+    access->argument = argument;
+    access->alignment = allocation->byte_alignment;
+    IREE_RETURN_IF_ERROR(loom_xdna_array_form_load_address(
+        context->family, worker->tile->coordinate, LOOM_XDNA_MEMORY_SPACE_DATA,
+        owner, (uint32_t)allocation->byte_offset,
+        (uint32_t)allocation->byte_length, &access->address));
+  }
+  return iree_ok_status();
+}
+
 static bool loom_aie2p_native_can_configure(
     const loom_aie2p_native_context_t* context,
     const loom_pipeline_realization_t* realization,
@@ -497,6 +554,8 @@ static iree_status_t loom_aie2p_native_select(
         context->family, tile->coordinate, tile->coordinate,
         worker->completion_lock, &worker->completion_selector));
     IREE_RETURN_IF_ERROR(loom_aie2p_native_select_channel_accesses(
+        context, realization, source, worker));
+    IREE_RETURN_IF_ERROR(loom_aie2p_native_select_buffer_accesses(
         context, realization, source, worker));
   }
   IREE_RETURN_IF_ERROR(
