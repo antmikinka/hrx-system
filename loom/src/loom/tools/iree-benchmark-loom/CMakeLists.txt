@@ -90,6 +90,7 @@ loom_cc_library(
     loom::error::renderer
     loom::ir
     loom::ir::facts
+    loom::ops::check
     loom::ops::special_values
     loom::sanitizer::options
     loom::tooling::cli::help
@@ -280,6 +281,7 @@ iree_execution_test_suite(
   TOOLS
     "iree-benchmark-loom=::iree-benchmark-loom"
   DATA
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/testbench/testdata/requirements.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-benchmark-loom/testdata/device_events.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-benchmark-loom/testdata/scalar_benchmarks.loom"
   LABELS

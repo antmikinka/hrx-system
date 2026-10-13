@@ -32,9 +32,9 @@ typedef enum loom_testbench_requirement_op_kind_e {
 } loom_testbench_requirement_op_kind_t;
 
 typedef enum loom_testbench_requirement_skip_code_e {
-  // No skipped-case code is associated with the result.
+  // No skipped-record code is associated with the result.
   LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_NONE = 0,
-  // The case referenced a provider that was not registered.
+  // The record referenced a provider that was not registered.
   LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_PROVIDER_NOT_REGISTERED = 1,
   // The registered provider cannot answer for the current environment.
   LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_PROVIDER_UNAVAILABLE = 2,
@@ -92,7 +92,7 @@ typedef struct loom_testbench_requirement_provider_registry_t {
 } loom_testbench_requirement_provider_registry_t;
 
 typedef struct loom_testbench_requirement_result_t {
-  // True when the selected case should be skipped.
+  // True when the selected record should be skipped.
   bool skipped;
   // Requirement op that caused the skip, or NULL when not skipped.
   const loom_op_t* op;
@@ -112,7 +112,7 @@ typedef struct loom_testbench_requirement_result_t {
 iree_string_view_t loom_testbench_requirement_op_kind_name(
     loom_testbench_requirement_op_kind_t op_kind);
 
-// Returns the stable report string for a skipped-case code.
+// Returns the stable report string for a skipped-record code.
 iree_string_view_t loom_testbench_requirement_skip_code_name(
     loom_testbench_requirement_skip_code_t code);
 
@@ -137,9 +137,9 @@ iree_status_t loom_testbench_requirement_read_optional_i64_attr(
     const loom_module_t* module, loom_named_attr_slice_t attrs,
     iree_string_view_t name, bool* out_present, int64_t* out_value);
 
-// Evaluates requirement ops in source order for |case_plan|.
-iree_status_t loom_testbench_evaluate_case_requirements(
-    const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
+// Evaluates requirement ops in source order in a case or scenario |body|.
+iree_status_t loom_testbench_evaluate_requirements(
+    const loom_module_t* module, const loom_region_t* body,
     const loom_testbench_requirement_provider_registry_t* registry,
     loom_testbench_requirement_result_t* out_result);
 

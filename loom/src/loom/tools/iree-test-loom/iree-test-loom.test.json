@@ -350,19 +350,29 @@
       "name": "reports skipped requirements with stable codes",
       "run": {
         "tool": "iree-test-loom",
-        "args": ["{srcdir}/testdata/requirement_cases.loom"]
+        "args": [
+          "{srcdir}/../../tooling/testbench/testdata/requirements.loom"
+        ]
       },
       "stdout": {
         "contains": [
           "\"format\":\"loom.test.v0\"",
-          "\"case_count\":2",
-          "\"sample_count\":0",
+          "\"case_count\":3",
+          "\"scenario_count\":3",
+          "\"sample_count\":1",
           "\"failed_sample_count\":0",
+          "\"trial_count\":2",
+          "\"failed_trial_count\":0",
           "\"skipped_case_count\":2",
+          "\"skipped_scenario_count\":2",
           "\"case\":\"missing_provider_requirement\",\"provider\":\"missing.provider\",\"op\":\"requires\",\"code\":\"provider_not_registered\"",
-          "\"case\":\"missing_provider_skip_if\",\"provider\":\"missing.provider\",\"op\":\"skip_if\",\"code\":\"provider_not_registered\",\"display_message\":\"human skip display text\""
+          "\"case\":\"missing_provider_skip_if\",\"provider\":\"missing.provider\",\"op\":\"skip_if\",\"code\":\"provider_not_registered\",\"display_message\":\"human skip display text\"",
+          "\"scenario\":\"missing_scenario_requirement\",\"provider\":\"missing.provider\",\"op\":\"requires\",\"code\":\"provider_not_registered\"",
+          "\"scenario\":\"missing_scenario_skip_if\",\"provider\":\"missing.provider\",\"op\":\"skip_if\",\"code\":\"provider_not_registered\",\"display_message\":\"scenario requires an available provider\""
         ],
-        "not_contains": ["\"reason\""]
+        "not_contains": [
+          "\"reason\""
+        ]
       }
     },
     {
@@ -462,6 +472,54 @@
           "--device=loom-unavailable",
           "not available in this Loom installation",
           "no linked LoomC target adapter"
+        ]
+      }
+    },
+    {
+      "name": "a skipped scenario cannot satisfy xfail",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/../../tooling/testbench/testdata/requirements.loom",
+          "--case=@missing_scenario_requirement",
+          "--xfail=@missing_scenario_requirement=TARGET/001"
+        ]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stdout": {
+        "contains": [
+          "\"trial_count\":0",
+          "\"skipped_scenario_count\":1",
+          "\"xfail_count\":0",
+          "\"xpass_count\":0",
+          "\"xfail_mismatch_count\":1",
+          "\"outcome\":\"diagnostic_mismatch\""
+        ]
+      }
+    },
+    {
+      "name": "a skipped scenario cannot satisfy allow-failure",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/../../tooling/testbench/testdata/requirements.loom",
+          "--case=@missing_scenario_requirement",
+          "--allow-failure=@missing_scenario_requirement=TARGET/001"
+        ]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stdout": {
+        "contains": [
+          "\"trial_count\":0",
+          "\"skipped_scenario_count\":1",
+          "\"xfail_count\":0",
+          "\"xpass_count\":0",
+          "\"xfail_mismatch_count\":1",
+          "\"outcome\":\"diagnostic_mismatch\""
         ]
       }
     }

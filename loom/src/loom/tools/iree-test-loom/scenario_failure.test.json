@@ -165,6 +165,109 @@
           "\"start_line\":66,\"start_column\":7,\"end_line\":66,\"end_column\":67"
         ]
       }
+    },
+    {
+      "name": "executes satisfied requirements without querying unselected records",
+      "run": {
+        "tool": "scenario-failure-test",
+        "args": [
+          "{srcdir}/testdata/scenario_requirements.loom",
+          "--case=@admitted"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"trial_count\":1",
+          "\"failed_trial_count\":0",
+          "\"skipped_scenario_count\":0"
+        ]
+      }
+    },
+    {
+      "name": "reports unsatisfied scenario requirement",
+      "run": {
+        "tool": "scenario-failure-test",
+        "args": [
+          "{srcdir}/testdata/scenario_requirements.loom",
+          "--case=@unsatisfied"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"trial_count\":0",
+          "\"skipped_scenario_count\":1",
+          "\"code\":\"requirement_not_satisfied\""
+        ]
+      }
+    },
+    {
+      "name": "reports matched scenario requirement",
+      "run": {
+        "tool": "scenario-failure-test",
+        "args": [
+          "{srcdir}/testdata/scenario_requirements.loom",
+          "--case=@matched"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"trial_count\":0",
+          "\"skipped_scenario_count\":1",
+          "\"code\":\"skip_predicate_matched\""
+        ]
+      }
+    },
+    {
+      "name": "reports unavailable scenario requirement",
+      "run": {
+        "tool": "scenario-failure-test",
+        "args": [
+          "{srcdir}/testdata/scenario_requirements.loom",
+          "--case=@unavailable"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"trial_count\":0",
+          "\"skipped_scenario_count\":1",
+          "\"code\":\"provider_unavailable\""
+        ]
+      }
+    },
+    {
+      "name": "reports unavailable_skip scenario requirement",
+      "run": {
+        "tool": "scenario-failure-test",
+        "args": [
+          "{srcdir}/testdata/scenario_requirements.loom",
+          "--case=@unavailable_skip"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"trial_count\":0",
+          "\"skipped_scenario_count\":1",
+          "\"code\":\"provider_unavailable\""
+        ]
+      }
+    },
+    {
+      "name": "propagates scenario provider errors",
+      "run": {
+        "tool": "scenario-failure-test",
+        "args": [
+          "{srcdir}/testdata/scenario_requirements.loom",
+          "--case=@provider_error"
+        ]
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stderr": {
+        "contains": [
+          "controlled requirement provider failed"
+        ]
+      }
     }
   ]
 }

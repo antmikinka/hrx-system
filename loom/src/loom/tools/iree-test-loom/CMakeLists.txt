@@ -47,6 +47,7 @@ loom_cc_library(
     loom::binding::c::loomc
     loom::binding::c::target::iree_hal
     loom::config::text_binding
+    loom::ops::check
     loom::sanitizer::options
     loom::tooling::cli::help
     loom::tooling::cli::loomc_options
@@ -140,6 +141,7 @@ loom_cc_binary(
     iree::base
     iree::hal
     loom::ir
+    loom::tooling::testbench::requirements
     loom::tooling::testbench::scenario::executor
   TESTONLY
 )
@@ -154,10 +156,10 @@ iree_execution_test_suite(
     "loom-link=loom::tools::loom-link"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/input/testdata/duplicate_symbols.loom-test"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tooling/testbench/testdata/requirements.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/file_cases.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/library_cases.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/linked_input_cases.loom"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/requirement_cases.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/scalar_cases.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/xfail_cases.loom"
   LABELS
@@ -188,6 +190,7 @@ iree_execution_test_suite(
     "scenario-failure-test=::scenario_failure_test_tool"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/scenario_failures.loom"
+    "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/scenario_requirements.loom"
   LABELS
     "hostonly"
 )

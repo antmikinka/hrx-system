@@ -29,6 +29,7 @@
 #include "loom/tools/iree-benchmark-loom/module_query.h"
 #include "loom/tools/iree-benchmark-loom/output.h"
 #include "loom/tools/iree-benchmark-loom/output_sink.h"
+#include "loom/tools/iree-benchmark-loom/testbench.h"
 #include "loom/tools/iree-benchmark-loom/work_execution.h"
 #include "loom/tools/iree-benchmark-loom/work_plan.h"
 #include "loomc/interop.h"
@@ -576,12 +577,22 @@ iree_status_t iree_benchmark_loom_run_file(
         .compile_report = compile_report_options,
         .artifact_manifest = artifact_manifest_options,
     };
+    if (iree_status_is_ok(status) && failure_count == 0 &&
+        !benchmark_options->dry_run &&
+        work_plan.selected_benchmark_count != 0) {
+      status = iree_benchmark_loom_evaluate_requirements(
+          options->configuration, &hal_context.execution, &module_plan,
+          &plan_arena, &work_plan);
+    }
     const loom_testbench_function_call_provider_callback_t function_calls =
         options->configuration->function_call_provider;
     if (iree_status_is_ok(status) && failure_count == 0 && function_calls.fn) {
       iree_host_size_t function_call_capacity = 0;
       for (iree_host_size_t i = 0; i < work_plan.selected_benchmark_count;
            ++i) {
+        if (work_plan.selected_benchmarks[i].skipped) {
+          continue;
+        }
         const loom_testbench_case_plan_t* case_plan =
             work_plan.selected_benchmarks[i].case_plan;
         if (case_plan != NULL && case_plan->issue_count == 0) {
@@ -607,6 +618,9 @@ iree_status_t iree_benchmark_loom_run_file(
       for (iree_host_size_t i = 0;
            iree_status_is_ok(status) && i < work_plan.selected_benchmark_count;
            ++i) {
+        if (work_plan.selected_benchmarks[i].skipped) {
+          continue;
+        }
         const loom_testbench_case_plan_t* case_plan =
             work_plan.selected_benchmarks[i].case_plan;
         if (case_plan != NULL && case_plan->issue_count == 0) {

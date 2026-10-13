@@ -129,6 +129,31 @@
           "\"failed_sample_count\":1"
         ]
       }
+    },
+    {
+      "name": "skips requirements before preparing cases or scenarios",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/../../tooling/testbench/testdata/requirements.loom",
+          "--iterations=1",
+          "--warmup-iterations=0",
+          "--output-format=jsonl"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"benchmark_result\":{\"benchmark\":\"missing_case\",\"case\":\"missing_provider_requirement\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"skip_case\",\"case\":\"missing_provider_skip_if\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"missing_scenario\",\"scenario\":\"missing_scenario_requirement\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"missing_scenario_alias\",\"scenario\":\"missing_scenario_requirement\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"skip_scenario\",\"scenario\":\"missing_scenario_skip_if\",\"state\":\"skipped\"",
+          "\"benchmark_result\":{\"benchmark\":\"host\",\"case\":\"admitted_host\",\"state\":\"ok\"",
+          "\"selected_benchmark_count\":6,\"logical_sample_count\":13,\"work_item_count\":9",
+          "\"failed_benchmark_count\":0",
+          "\"correctness\":{\"sample_count\":1,\"failed_sample_count\":0}"
+        ]
+      }
     }
   ]
 }

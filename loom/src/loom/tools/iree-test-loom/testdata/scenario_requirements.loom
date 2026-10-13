@@ -1,0 +1,68 @@
+func.decl @scenario_wrong_result(%input: i32) -> (i32)
+
+check.scenario @admitted {
+  check.requires<controlled.requirement> {state = "satisfied"}
+  check.skip_if<controlled.requirement> {state = "unsatisfied"}
+  check.trial[1](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(41) : i32
+    check.compare<@scenario_wrong_result>(%input) : (i32) -> [actual(%actual: i32), expected(%expected: i32)] {
+      check.expect.equal actual(%actual) expected(%expected) : i32
+    }
+  }
+  check.return
+}
+
+check.scenario @unsatisfied {
+  check.requires<controlled.requirement> {state = "unsatisfied"}
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(41) : i32
+    check.compare<@scenario_wrong_result>(%input) : (i32) -> [actual(%actual: i32), expected(%expected: i32)] {
+      check.expect.equal actual(%actual) expected(%expected) : i32
+    }
+  }
+  check.return
+}
+
+check.scenario @matched {
+  check.skip_if<controlled.requirement> {state = "satisfied"}
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(41) : i32
+    check.compare<@scenario_wrong_result>(%input) : (i32) -> [actual(%actual: i32), expected(%expected: i32)] {
+      check.expect.equal actual(%actual) expected(%expected) : i32
+    }
+  }
+  check.return
+}
+
+check.scenario @unavailable {
+  check.requires<controlled.requirement> {state = "unavailable"}
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(41) : i32
+    check.compare<@scenario_wrong_result>(%input) : (i32) -> [actual(%actual: i32), expected(%expected: i32)] {
+      check.expect.equal actual(%actual) expected(%expected) : i32
+    }
+  }
+  check.return
+}
+
+check.scenario @unavailable_skip {
+  check.skip_if<controlled.requirement> {state = "unavailable"}
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(41) : i32
+    check.compare<@scenario_wrong_result>(%input) : (i32) -> [actual(%actual: i32), expected(%expected: i32)] {
+      check.expect.equal actual(%actual) expected(%expected) : i32
+    }
+  }
+  check.return
+}
+
+check.scenario @provider_error {
+  check.requires<controlled.requirement> {state = "error"}
+  check.trial[3](%trial: index, %entropy: check.entropy) {
+    %input = check.literal value(41) : i32
+    check.compare<@scenario_wrong_result>(%input) : (i32) -> [actual(%actual: i32), expected(%expected: i32)] {
+      check.expect.equal actual(%actual) expected(%expected) : i32
+    }
+  }
+  check.return
+}

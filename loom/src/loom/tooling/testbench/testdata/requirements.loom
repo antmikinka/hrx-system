@@ -1,0 +1,66 @@
+check.case @missing_provider_requirement {
+  check.requires<missing.provider> {}
+  check.return
+}
+
+check.case @missing_provider_skip_if {
+  check.skip_if<missing.provider> {} reason("human skip display text")
+  check.return
+}
+
+func.decl @unavailable_generator(%trial: index) -> (i32)
+
+func.def @generate_value(%trial: index) -> (i32) {
+  %value = index.cast %trial : index to i32
+  func.return %value : i32
+}
+
+func.def @identity(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+check.scenario @missing_scenario_requirement configure[2](%configuration: index, %configuration_entropy: check.entropy) {
+  check.requires<missing.provider> {}
+  check.trial[2](%trial: index, %entropy: check.entropy) {
+    %value = check.generate<@unavailable_generator>(%trial) : (index) -> (i32)
+    check.invoke<@identity>(%value) : (i32) -> (i32)
+  }
+  check.return
+}
+
+check.scenario @missing_scenario_skip_if {
+  check.skip_if<missing.provider> {} reason("scenario requires an available provider")
+  check.trial[2](%trial: index, %entropy: check.entropy) {
+    %value = check.generate<@unavailable_generator>(%trial) : (index) -> (i32)
+    check.invoke<@identity>(%value) : (i32) -> (i32)
+  }
+  check.return
+}
+
+check.scenario @admitted_generator {
+  check.trial[2](%trial: index, %entropy: check.entropy) {
+    %value = check.generate<@generate_value>(%trial) : (index) -> (i32)
+    check.compare<@identity>(%value) : (i32) -> [actual(%actual: i32), expected(%expected: i32)] {
+      check.expect.equal actual(%actual) expected(%expected) : i32
+    }
+  }
+  check.return
+}
+
+check.case @admitted_host {
+  %value = check.literal value(42) : i32
+  check.expect.equal actual(%value) expected(%value) : i32
+  check.return
+}
+
+check.benchmark<@missing_provider_requirement> @missing_case
+
+check.benchmark<@missing_provider_skip_if> @skip_case
+
+check.benchmark<@missing_scenario_requirement> @missing_scenario
+
+check.benchmark<@missing_scenario_requirement> @missing_scenario_alias
+
+check.benchmark<@missing_scenario_skip_if> @skip_scenario
+
+check.benchmark<@admitted_host> @host

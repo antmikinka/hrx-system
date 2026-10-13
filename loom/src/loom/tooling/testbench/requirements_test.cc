@@ -149,12 +149,14 @@ check.case @unavailable_requirement {
       providers, IREE_ARRAYSIZE(providers), &registry);
 
   loom_testbench_requirement_result_t result = {};
-  IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
-      module.get(), &plan.cases[0], &registry, &result));
+  IREE_ASSERT_OK(loom_testbench_evaluate_requirements(
+      module.get(), loom_check_case_body(plan.cases[0].op), &registry,
+      &result));
   EXPECT_FALSE(result.skipped);
 
-  IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
-      module.get(), &plan.cases[1], &registry, &result));
+  IREE_ASSERT_OK(loom_testbench_evaluate_requirements(
+      module.get(), loom_check_case_body(plan.cases[1].op), &registry,
+      &result));
   EXPECT_TRUE(result.skipped);
   EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES);
   EXPECT_EQ(result.code,
@@ -165,8 +167,9 @@ check.case @unavailable_requirement {
   EXPECT_TRUE(iree_string_view_equal(result.display_message,
                                      IREE_SV("fake requirement was disabled")));
 
-  IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
-      module.get(), &plan.cases[2], &registry, &result));
+  IREE_ASSERT_OK(loom_testbench_evaluate_requirements(
+      module.get(), loom_check_case_body(plan.cases[2].op), &registry,
+      &result));
   EXPECT_TRUE(result.skipped);
   EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_SKIP_IF);
   EXPECT_EQ(result.code,
@@ -175,8 +178,9 @@ check.case @unavailable_requirement {
   EXPECT_TRUE(iree_string_view_equal(result.display_message,
                                      IREE_SV("case is intentionally skipped")));
 
-  IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
-      module.get(), &plan.cases[3], &registry, &result));
+  IREE_ASSERT_OK(loom_testbench_evaluate_requirements(
+      module.get(), loom_check_case_body(plan.cases[3].op), &registry,
+      &result));
   EXPECT_TRUE(result.skipped);
   EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES);
   EXPECT_EQ(result.code,
@@ -207,8 +211,9 @@ check.case @unknown_skip_if {
   loom_testbench_requirement_provider_registry_initialize(nullptr, 0,
                                                           &registry);
   loom_testbench_requirement_result_t result = {};
-  IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
-      module.get(), &plan.cases[0], &registry, &result));
+  IREE_ASSERT_OK(loom_testbench_evaluate_requirements(
+      module.get(), loom_check_case_body(plan.cases[0].op), &registry,
+      &result));
   EXPECT_TRUE(result.skipped);
   EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES);
   EXPECT_EQ(result.code,
@@ -218,8 +223,9 @@ check.case @unknown_skip_if {
   EXPECT_TRUE(iree_string_view_is_empty(result.provider_code));
   EXPECT_TRUE(iree_string_view_is_empty(result.display_message));
 
-  IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
-      module.get(), &plan.cases[1], &registry, &result));
+  IREE_ASSERT_OK(loom_testbench_evaluate_requirements(
+      module.get(), loom_check_case_body(plan.cases[1].op), &registry,
+      &result));
   EXPECT_TRUE(result.skipped);
   EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_SKIP_IF);
   EXPECT_EQ(result.code,

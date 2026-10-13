@@ -15,6 +15,7 @@
 #include "loom/tooling/testbench/reference.h"
 #include "loom/tooling/testbench/requirements.h"
 #include "loom/tools/iree-benchmark-loom/configuration.h"
+#include "loom/tools/iree-benchmark-loom/work_plan.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,13 +34,14 @@ typedef struct iree_benchmark_loom_reference_oracles_t {
       providers[IREE_BENCHMARK_LOOM_REFERENCE_ORACLE_PROVIDER_COUNT];
 } iree_benchmark_loom_reference_oracles_t;
 
-// Evaluates check.requires/check.skip_if predicates for |case_plan|.
-iree_status_t iree_benchmark_loom_evaluate_case_requirements(
+// Evaluates each selected case or scenario's requirements once and retains the
+// skip decision in every selected benchmark referencing that record. Call
+// before binding generator invocations or preparing any execution resources.
+iree_status_t iree_benchmark_loom_evaluate_requirements(
     const iree_benchmark_loom_configuration_t* configuration,
     loom_run_hal_testbench_context_t* hal_context,
     const loom_testbench_module_plan_t* module_plan,
-    const loom_testbench_case_plan_t* case_plan,
-    loom_testbench_requirement_result_t* out_result);
+    iree_arena_allocator_t* arena, iree_benchmark_loom_work_plan_t* work_plan);
 
 // Configures generic host reference oracles used by check.oracle.call.
 void iree_benchmark_loom_configure_reference_oracles(

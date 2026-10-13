@@ -147,6 +147,20 @@ iree_status_t iree_benchmark_loom_run_work_plan(
        ++work_item_index) {
     const iree_benchmark_loom_work_item_t* work_item =
         &work_plan->work_items[work_item_index];
+    const iree_benchmark_loom_selected_benchmark_t* selection =
+        &work_plan
+             ->selected_benchmarks[work_item->representative_selection_index];
+    if (selection->skipped) {
+      const iree_benchmark_loom_benchmark_result_t benchmark_result = {
+          .state = IREE_SV("skipped"),
+      };
+      status = iree_benchmark_loom_emit_work_item_result_aliases(
+          options->run, options->module_plan, work_plan, work_item,
+          &benchmark_result, /*correctness_sample_count=*/0,
+          /*correctness_failed_sample_count=*/0, options->event_sink,
+          inout_failed_benchmark_count);
+      continue;
+    }
     switch ((iree_benchmark_loom_work_item_kind_t)work_item->kind) {
       case IREE_BENCHMARK_LOOM_WORK_ITEM_CASE_END_TO_END: {
         if (work_item->hal_compile_item_index ==

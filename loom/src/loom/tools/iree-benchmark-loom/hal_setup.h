@@ -49,10 +49,8 @@ typedef struct iree_benchmark_loom_hal_setup_options_t {
 } iree_benchmark_loom_hal_setup_options_t;
 
 typedef struct iree_benchmark_loom_hal_compile_context_t {
-  // True once this compile item has been initialized or skipped.
+  // True once this compile item has been initialized.
   bool initialized;
-  // True when target requirements skip every work item using this compile item.
-  bool skipped;
   // True when this compile item executes a multi-actual sequence.
   bool uses_sequence;
   // Compiled multi-actual sequence reused by all work items in the compile

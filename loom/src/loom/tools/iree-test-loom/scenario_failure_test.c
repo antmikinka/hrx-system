@@ -208,6 +208,45 @@ iree_test_loom_scenario_failure_bind_profile(
   };
 }
 
+static iree_status_t iree_test_loom_scenario_query_requirement(
+    void* user_data, const loom_module_t* module, loom_named_attr_slice_t attrs,
+    loom_testbench_requirement_provider_result_t* out_result) {
+  (void)user_data;
+  iree_string_view_t state = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_string_attr(
+      module, attrs, IREE_SV("state"), &state));
+  if (iree_string_view_equal(state, IREE_SV("satisfied"))) {
+    out_result->state = LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_SATISFIED;
+  } else if (iree_string_view_equal(state, IREE_SV("unsatisfied"))) {
+    out_result->state = LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNSATISFIED;
+  } else if (iree_string_view_equal(state, IREE_SV("unavailable"))) {
+    out_result->state = LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNAVAILABLE;
+  } else {
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
+                            "controlled requirement provider failed");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t iree_test_loom_scenario_populate_requirements(
+    void* user_data, loom_run_hal_testbench_context_t* hal_context,
+    iree_host_size_t provider_capacity,
+    loom_testbench_requirement_provider_t* providers,
+    iree_host_size_t* inout_provider_count) {
+  (void)user_data;
+  (void)hal_context;
+  if (*inout_provider_count >= provider_capacity) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "no capacity for controlled requirement provider");
+  }
+  providers[(*inout_provider_count)++] =
+      (loom_testbench_requirement_provider_t){
+          .name = IREE_SV("controlled.requirement"),
+          .query = iree_test_loom_scenario_query_requirement,
+      };
+  return iree_ok_status();
+}
+
 int main(int argc, char** argv) {
   iree_test_loom_scenario_failure_profile_t target = {
       .name = IREE_SV("controlled-target"),
@@ -219,6 +258,10 @@ int main(int argc, char** argv) {
   };
   const iree_test_loom_configuration_t configuration = {
       .tool_name = "iree-test-loom-scenario-failure-test",
+      .populate_requirement_providers =
+          {
+              .fn = iree_test_loom_scenario_populate_requirements,
+          },
       .scenario_target_profile =
           {
               .fn = iree_test_loom_scenario_failure_bind_profile,

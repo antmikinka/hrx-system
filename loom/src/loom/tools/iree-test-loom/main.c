@@ -18,6 +18,7 @@
 #include "iree/hal/memory/heap_pool.h"
 #include "iree/io/stdio_stream.h"
 #include "loom/config/text_binding.h"
+#include "loom/ops/check/ops.h"
 #include "loom/sanitizer/options.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/cli/loomc_options.h"
@@ -354,15 +355,42 @@ static bool iree_test_loom_case_has_kernel_launch(
   return case_plan->kernel_launch_count != 0;
 }
 
-static iree_status_t iree_test_loom_append_skipped_case(
-    const loom_testbench_case_plan_t* case_plan,
+static iree_status_t iree_test_loom_evaluate_requirements(
+    const iree_test_loom_configuration_t* configuration,
+    loom_run_hal_testbench_context_t* hal_context, const loom_module_t* module,
+    const loom_region_t* body,
+    loom_testbench_requirement_result_t* out_result) {
+  loom_testbench_requirement_provider_t
+      requirement_providers[IREE_TEST_LOOM_MAX_REQUIREMENT_PROVIDERS] = {0};
+  iree_host_size_t requirement_provider_count = 0;
+  if (configuration->populate_requirement_providers.fn != NULL) {
+    IREE_RETURN_IF_ERROR(configuration->populate_requirement_providers.fn(
+        configuration->populate_requirement_providers.user_data, hal_context,
+        IREE_ARRAYSIZE(requirement_providers), requirement_providers,
+        &requirement_provider_count));
+  }
+  if (requirement_provider_count > IREE_ARRAYSIZE(requirement_providers)) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "iree-test-loom requirement provider capacity exceeded");
+  }
+  loom_testbench_requirement_provider_registry_t requirement_registry = {0};
+  loom_testbench_requirement_provider_registry_initialize(
+      requirement_providers, requirement_provider_count, &requirement_registry);
+  return loom_testbench_evaluate_requirements(
+      module, body, &requirement_registry, out_result);
+}
+
+static iree_status_t iree_test_loom_append_skipped_record(
+    iree_string_view_t kind, iree_string_view_t name,
     const loom_testbench_requirement_result_t* requirement_result,
-    loom_json_array_writer_t* skipped_cases) {
-  IREE_RETURN_IF_ERROR(loom_json_array_begin_element(skipped_cases));
+    loom_json_array_writer_t* skipped_records) {
+  IREE_RETURN_IF_ERROR(loom_json_array_begin_element(skipped_records));
   loom_json_object_writer_t object;
-  IREE_RETURN_IF_ERROR(loom_json_object_begin(skipped_cases->stream, &object));
-  IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
-      &object, IREE_SV("case"), case_plan->name));
+  IREE_RETURN_IF_ERROR(
+      loom_json_object_begin(skipped_records->stream, &object));
+  IREE_RETURN_IF_ERROR(
+      loom_json_object_write_string_field(&object, kind, name));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
       &object, IREE_SV("provider"), requirement_result->provider));
   IREE_RETURN_IF_ERROR(loom_json_object_write_string_field(
@@ -453,7 +481,6 @@ static iree_status_t iree_test_loom_configure_hal_actual_sequence(
 }
 
 static iree_status_t iree_test_loom_run_case_samples(
-    const iree_test_loom_configuration_t* configuration,
     const loom_testbench_compilation_t* compilation,
     const loom_module_t* native_module,
     const loom_testbench_module_plan_t* module_plan,
@@ -466,38 +493,9 @@ static iree_status_t iree_test_loom_run_case_samples(
     iree_test_loom_diagnostic_capture_t* diagnostic_capture,
     loom_run_hal_testbench_context_t* hal_context,
     iree_arena_allocator_t* arena, loom_json_array_writer_t* samples,
-    loom_json_array_writer_t* skipped_cases,
     iree_host_size_t* inout_sample_count,
-    iree_host_size_t* inout_failed_sample_count,
-    iree_host_size_t* inout_skipped_case_count) {
+    iree_host_size_t* inout_failed_sample_count) {
   const loom_testbench_case_plan_t* case_plan = &module_plan->cases[case_index];
-  loom_testbench_requirement_provider_t
-      requirement_providers[IREE_TEST_LOOM_MAX_REQUIREMENT_PROVIDERS] = {0};
-  iree_host_size_t requirement_provider_count = 0;
-  if (configuration->populate_requirement_providers.fn != NULL) {
-    IREE_RETURN_IF_ERROR(configuration->populate_requirement_providers.fn(
-        configuration->populate_requirement_providers.user_data, hal_context,
-        IREE_ARRAYSIZE(requirement_providers), requirement_providers,
-        &requirement_provider_count));
-  }
-  if (requirement_provider_count > IREE_ARRAYSIZE(requirement_providers)) {
-    return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
-        "iree-test-loom requirement provider capacity exceeded");
-  }
-  loom_testbench_requirement_provider_registry_t requirement_registry = {0};
-  loom_testbench_requirement_provider_registry_initialize(
-      requirement_providers, requirement_provider_count, &requirement_registry);
-  loom_testbench_requirement_result_t requirement_result = {0};
-  IREE_RETURN_IF_ERROR(loom_testbench_evaluate_case_requirements(
-      module_plan->module, case_plan, &requirement_registry,
-      &requirement_result));
-  if (requirement_result.skipped) {
-    IREE_RETURN_IF_ERROR(iree_test_loom_append_skipped_case(
-        case_plan, &requirement_result, skipped_cases));
-    ++*inout_skipped_case_count;
-    return iree_ok_status();
-  }
 
   iree_host_size_t selected_sample_ordinal = 0;
   bool has_selected_sample = false;
@@ -692,10 +690,13 @@ static iree_status_t iree_test_loom_write_report(
     iree_host_size_t case_count, iree_host_size_t scenario_count,
     iree_host_size_t sample_count, iree_host_size_t failed_sample_count,
     iree_host_size_t trial_count, iree_host_size_t failed_trial_count,
-    iree_host_size_t skipped_case_count, iree_host_size_t planning_issue_count,
+    iree_host_size_t skipped_case_count,
+    iree_host_size_t skipped_scenario_count,
+    iree_host_size_t planning_issue_count,
     const iree_test_loom_xfail_list_t* xfails, iree_string_view_t samples,
     iree_string_view_t trials, iree_string_view_t skipped_cases,
-    iree_string_view_t planning_issues, iree_string_builder_t* output) {
+    iree_string_view_t skipped_scenarios, iree_string_view_t planning_issues,
+    iree_string_builder_t* output) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(output, &stream);
   loom_json_object_writer_t object;
@@ -717,6 +718,8 @@ static iree_status_t iree_test_loom_write_report(
   IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
       &object, IREE_SV("skipped_case_count"), skipped_case_count));
   IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
+      &object, IREE_SV("skipped_scenario_count"), skipped_scenario_count));
+  IREE_RETURN_IF_ERROR(loom_json_object_write_host_size_field(
       &object, IREE_SV("planning_issue_count"), planning_issue_count));
   const iree_test_loom_xfail_counts_t xfail_counts =
       iree_test_loom_count_xfails(xfails);
@@ -735,6 +738,9 @@ static iree_status_t iree_test_loom_write_report(
   IREE_RETURN_IF_ERROR(
       loom_json_object_begin_field(&object, IREE_SV("skipped_cases")));
   IREE_RETURN_IF_ERROR(loom_output_stream_write(&stream, skipped_cases));
+  IREE_RETURN_IF_ERROR(
+      loom_json_object_begin_field(&object, IREE_SV("skipped_scenarios")));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write(&stream, skipped_scenarios));
   IREE_RETURN_IF_ERROR(
       loom_json_object_begin_field(&object, IREE_SV("planning_issues")));
   IREE_RETURN_IF_ERROR(loom_output_stream_write(&stream, planning_issues));
@@ -840,9 +846,10 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "\n"
       "The report carries case/sample and scenario/trial counts, including\n"
       "`failed_sample_count` and `failed_trial_count`, plus\n"
-      "`skipped_case_count`, `planning_issue_count`, `samples`, "
-      "`trials`, `skipped_cases`,\n"
-      "and `planning_issues`. Skipped cases use\n"
+      "`skipped_case_count`, `skipped_scenario_count`, "
+      "`planning_issue_count`,\n"
+      "`samples`, `trials`, `skipped_cases`, `skipped_scenarios`,\n"
+      "and `planning_issues`. Skipped records use\n"
       "stable `op` and `code` fields; `provider_code` is provider-defined and\n"
       "`display_message` is human-facing only. Failed samples may include "
       "`issues`\n"
@@ -918,6 +925,8 @@ int iree_test_loom_main(int argc, char** argv,
   iree_string_builder_initialize(allocator, &trial_output);
   iree_string_builder_t skipped_output;
   iree_string_builder_initialize(allocator, &skipped_output);
+  iree_string_builder_t skipped_scenario_output;
+  iree_string_builder_initialize(allocator, &skipped_scenario_output);
   iree_string_builder_t planning_issue_output;
   iree_string_builder_initialize(allocator, &planning_issue_output);
   iree_string_builder_t report_output;
@@ -953,6 +962,14 @@ int iree_test_loom_main(int argc, char** argv,
   loom_json_array_writer_t skipped_cases;
   if (iree_status_is_ok(status)) {
     status = loom_json_array_begin(&skipped_stream, &skipped_cases);
+  }
+  loom_output_stream_t skipped_scenario_stream;
+  loom_output_stream_for_builder(&skipped_scenario_output,
+                                 &skipped_scenario_stream);
+  loom_json_array_writer_t skipped_scenarios;
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_json_array_begin(&skipped_scenario_stream, &skipped_scenarios);
   }
   loom_output_stream_t planning_issue_stream;
   loom_output_stream_for_builder(&planning_issue_output,
@@ -1152,6 +1169,9 @@ int iree_test_loom_main(int argc, char** argv,
         &scenario_execution_options);
     const loom_testbench_case_plan_t** selected_cases = NULL;
     iree_host_size_t selected_case_count = 0;
+    loom_testbench_requirement_result_t* requirement_results = NULL;
+    iree_host_size_t selected_scenario_count = 0;
+    iree_host_size_t runnable_scenario_count = 0;
     const loom_testbench_compilation_t compilation = {
         .compiler = compiler,
         .workspace = compiler_workspace,
@@ -1167,17 +1187,56 @@ int iree_test_loom_main(int argc, char** argv,
                                          sizeof(*selected_cases),
                                          (void**)&selected_cases);
     }
+    const iree_host_size_t record_count =
+        module_plan.case_count + module_plan.scenario_count;
+    if (iree_status_is_ok(status) && record_count != 0) {
+      status = iree_arena_allocate_array(&plan_arena, record_count,
+                                         sizeof(*requirement_results),
+                                         (void**)&requirement_results);
+      if (iree_status_is_ok(status)) {
+        memset(requirement_results, 0,
+               record_count * sizeof(*requirement_results));
+      }
+    }
     if (iree_status_is_ok(status)) {
-      for (iree_host_size_t i = 0; i < module_plan.case_count; ++i) {
+      for (iree_host_size_t i = 0;
+           iree_status_is_ok(status) && i < module_plan.case_count; ++i) {
         const loom_testbench_case_plan_t* case_plan = &module_plan.cases[i];
         if (iree_test_loom_case_matches_selection(case_plan,
                                                   selected_case_name)) {
           selected_cases[selected_case_count++] = case_plan;
+          if (case_plan->issue_count == 0) {
+            status = iree_test_loom_evaluate_requirements(
+                configuration, &hal_context, module_plan.module,
+                loom_check_case_body(case_plan->op), &requirement_results[i]);
+          }
+        }
+      }
+      for (iree_host_size_t i = 0;
+           iree_status_is_ok(status) && i < module_plan.scenario_count; ++i) {
+        const loom_testbench_scenario_plan_t* scenario =
+            &module_plan.scenarios[i];
+        if (!iree_test_loom_scenario_matches_selection(scenario,
+                                                       selected_case_name)) {
+          continue;
+        }
+        ++selected_scenario_count;
+        if (scenario->issue_count == 0) {
+          loom_testbench_requirement_result_t* result =
+              &requirement_results[module_plan.case_count + i];
+          status = iree_test_loom_evaluate_requirements(
+              configuration, &hal_context, module_plan.module,
+              loom_check_scenario_body(scenario->op), result);
+          if (iree_status_is_ok(status) && !result->skipped) {
+            ++runnable_scenario_count;
+          }
         }
       }
       iree_host_size_t function_call_capacity = 0;
       for (iree_host_size_t i = 0; i < selected_case_count; ++i) {
-        if (selected_cases[i]->issue_count == 0) {
+        if (selected_cases[i]->issue_count == 0 &&
+            !requirement_results[selected_cases[i] - module_plan.cases]
+                 .skipped) {
           function_call_capacity += selected_cases[i]->invocation_count;
         }
       }
@@ -1186,6 +1245,8 @@ int iree_test_loom_main(int argc, char** argv,
         const loom_testbench_scenario_plan_t* scenario =
             &module_plan.scenarios[scenario_index];
         if (scenario->issue_count != 0 ||
+            requirement_results[module_plan.case_count + scenario_index]
+                .skipped ||
             !iree_test_loom_scenario_matches_selection(scenario,
                                                        selected_case_name)) {
           continue;
@@ -1198,7 +1259,7 @@ int iree_test_loom_main(int argc, char** argv,
         }
       }
       const loom_testbench_invocation_plan_t** function_calls = NULL;
-      if (function_call_capacity != 0) {
+      if (iree_status_is_ok(status) && function_call_capacity != 0) {
         status = iree_arena_allocate_array(&plan_arena, function_call_capacity,
                                            sizeof(*function_calls),
                                            (void**)&function_calls);
@@ -1207,7 +1268,8 @@ int iree_test_loom_main(int argc, char** argv,
       for (iree_host_size_t i = 0;
            iree_status_is_ok(status) && i < selected_case_count; ++i) {
         const loom_testbench_case_plan_t* case_plan = selected_cases[i];
-        if (case_plan->issue_count != 0) {
+        if (case_plan->issue_count != 0 ||
+            requirement_results[case_plan - module_plan.cases].skipped) {
           continue;
         }
         for (iree_host_size_t j = 0; j < case_plan->invocation_count; ++j) {
@@ -1225,6 +1287,8 @@ int iree_test_loom_main(int argc, char** argv,
         const loom_testbench_scenario_plan_t* scenario =
             &module_plan.scenarios[scenario_index];
         if (scenario->issue_count != 0 ||
+            requirement_results[module_plan.case_count + scenario_index]
+                .skipped ||
             !iree_test_loom_scenario_matches_selection(scenario,
                                                        selected_case_name)) {
           continue;
@@ -1303,14 +1367,7 @@ int iree_test_loom_main(int argc, char** argv,
       }
     }
 
-    iree_host_size_t selected_scenario_count = 0;
-    for (iree_host_size_t i = 0; i < module_plan.scenario_count; ++i) {
-      if (iree_test_loom_scenario_matches_selection(&module_plan.scenarios[i],
-                                                    selected_case_name)) {
-        ++selected_scenario_count;
-      }
-    }
-    if (iree_status_is_ok(status) && selected_scenario_count != 0 &&
+    if (iree_status_is_ok(status) && runnable_scenario_count != 0 &&
         !iree_string_view_is_empty(hal_context.driver_name)) {
       status = loom_run_hal_testbench_context_ensure_runtime(&hal_context);
       if (iree_status_is_ok(status)) {
@@ -1338,7 +1395,7 @@ int iree_test_loom_main(int argc, char** argv,
                 &hal_scenario_profile);
       }
     }
-    if (iree_status_is_ok(status) && selected_scenario_count != 0) {
+    if (iree_status_is_ok(status) && runnable_scenario_count != 0) {
       // Scenario values are shared with host oracles. Each execution profile
       // stages those values into its own device storage as needed.
       status = iree_test_loom_create_host_pool(allocator, &scenario_host_pool);
@@ -1351,6 +1408,7 @@ int iree_test_loom_main(int argc, char** argv,
     iree_host_size_t trial_count = 0;
     iree_host_size_t failed_trial_count = 0;
     iree_host_size_t skipped_case_count = 0;
+    iree_host_size_t skipped_scenario_count = 0;
     iree_host_size_t planning_issue_count = 0;
     if (iree_status_is_ok(status) && selected_scenario_count != 0 &&
         FLAG_sample >= 0) {
@@ -1374,15 +1432,18 @@ int iree_test_loom_main(int argc, char** argv,
       if (had_planning_issues) {
         status = iree_test_loom_append_case_planning_issues(
             &module_plan, case_plan, &planning_issues, &planning_issue_count);
+      } else if (requirement_results[case_index].skipped) {
+        status = iree_test_loom_append_skipped_record(
+            IREE_SV("case"), case_plan->name, &requirement_results[case_index],
+            &skipped_cases);
+        ++skipped_case_count;
       } else {
         status = iree_test_loom_run_case_samples(
-            configuration, &compilation, native_module, &module_plan,
-            case_index, &execution_options, pass_program,
-            requested_target_profile,
+            &compilation, native_module, &module_plan, case_index,
+            &execution_options, pass_program, requested_target_profile,
             sanitizer_enabled ? &loomc_sanitizer_options : NULL,
             compile_result_callback, &diagnostic_capture, &hal_context,
-            &execution_arena, &samples, &skipped_cases, &sample_count,
-            &failed_sample_count, &skipped_case_count);
+            &execution_arena, &samples, &sample_count, &failed_sample_count);
       }
       if (!iree_test_loom_xfail_try_accept_compile_failure(
               xfail, &diagnostic_capture, &status) &&
@@ -1429,10 +1490,17 @@ int iree_test_loom_main(int argc, char** argv,
           iree_test_loom_xfail_list_find(&xfails, scenario->name);
       iree_test_loom_diagnostic_capture_begin(&diagnostic_capture, xfail);
       const iree_host_size_t failed_trial_begin = failed_trial_count;
+      const loom_testbench_requirement_result_t* requirement_result =
+          &requirement_results[module_plan.case_count + scenario_index];
       const bool had_planning_issues = scenario->issue_count != 0;
       if (had_planning_issues) {
         status = iree_test_loom_append_scenario_planning_issues(
             &module_plan, scenario, &planning_issues, &planning_issue_count);
+      } else if (requirement_result->skipped) {
+        status = iree_test_loom_append_skipped_record(
+            IREE_SV("scenario"), scenario->name, requirement_result,
+            &skipped_scenarios);
+        ++skipped_scenario_count;
       } else {
         status = iree_test_loom_run_scenario(
             &module_plan, scenario_index, &scenario_execution_options,
@@ -1444,7 +1512,7 @@ int iree_test_loom_main(int argc, char** argv,
           iree_status_is_ok(status) && xfail != NULL) {
         const iree_host_size_t failed_trial_delta =
             failed_trial_count - failed_trial_begin;
-        if (had_planning_issues) {
+        if (had_planning_issues || requirement_result->skipped) {
           iree_test_loom_finish_xfail(
               xfail, &diagnostic_capture,
               IREE_TEST_LOOM_XFAIL_OUTCOME_DIAGNOSTIC_MISMATCH, 0, 0);
@@ -1484,16 +1552,20 @@ int iree_test_loom_main(int argc, char** argv,
       status = loom_json_array_end(&skipped_cases);
     }
     if (iree_status_is_ok(status)) {
+      status = loom_json_array_end(&skipped_scenarios);
+    }
+    if (iree_status_is_ok(status)) {
       status = loom_json_array_end(&planning_issues);
     }
     if (iree_status_is_ok(status)) {
       status = iree_test_loom_write_report(
           selected_case_count, selected_scenario_count, sample_count,
           failed_sample_count, trial_count, failed_trial_count,
-          skipped_case_count, planning_issue_count, &xfails,
-          iree_string_builder_view(&sample_output),
+          skipped_case_count, skipped_scenario_count, planning_issue_count,
+          &xfails, iree_string_builder_view(&sample_output),
           iree_string_builder_view(&trial_output),
           iree_string_builder_view(&skipped_output),
+          iree_string_builder_view(&skipped_scenario_output),
           iree_string_builder_view(&planning_issue_output), &report_output);
     }
     if (iree_status_is_ok(status)) {
@@ -1534,6 +1606,7 @@ int iree_test_loom_main(int argc, char** argv,
 
   iree_string_builder_deinitialize(&report_output);
   iree_string_builder_deinitialize(&planning_issue_output);
+  iree_string_builder_deinitialize(&skipped_scenario_output);
   iree_string_builder_deinitialize(&skipped_output);
   iree_string_builder_deinitialize(&trial_output);
   iree_string_builder_deinitialize(&sample_output);

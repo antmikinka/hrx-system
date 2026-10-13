@@ -22,18 +22,8 @@ static iree_status_t iree_benchmark_loom_initialize_sequence_compile_context(
   context->benchmark_materializer =
       options->case_execution_options->materializer;
 
-  loom_testbench_requirement_result_t requirement_result = {0};
-  iree_status_t status = iree_benchmark_loom_evaluate_case_requirements(
-      options->hal_context->configuration, &options->hal_context->execution,
-      options->module_plan, case_plan, &requirement_result);
-  if (iree_status_is_ok(status) && requirement_result.skipped) {
-    context->skipped = true;
-    return iree_ok_status();
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_run_hal_testbench_context_ensure_runtime(
-        &options->hal_context->execution);
-  }
+  iree_status_t status = loom_run_hal_testbench_context_ensure_runtime(
+      &options->hal_context->execution);
 
   if (iree_status_is_ok(status)) {
     context->execution_options.materializer.target_pool =
@@ -110,16 +100,6 @@ static iree_status_t iree_benchmark_loom_initialize_single_compile_context(
 
   iree_status_t status =
       loom_run_hal_testbench_select_kernel_launch(case_plan, &kernel_launch);
-  loom_testbench_requirement_result_t requirement_result = {0};
-  if (iree_status_is_ok(status)) {
-    status = iree_benchmark_loom_evaluate_case_requirements(
-        options->hal_context->configuration, &options->hal_context->execution,
-        options->module_plan, case_plan, &requirement_result);
-  }
-  if (iree_status_is_ok(status) && requirement_result.skipped) {
-    context->skipped = true;
-    return iree_ok_status();
-  }
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_testbench_context_ensure_runtime(
         &options->hal_context->execution);
@@ -290,9 +270,10 @@ iree_status_t iree_benchmark_loom_prepare_hal_work_item(
   const iree_benchmark_loom_hal_compile_item_t* compile_item =
       &work_plan->hal_compile_items[work_item->hal_compile_item_index];
 
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_hal_compile_context_initialize(
-      options, compile_item, compile_context));
-  if (compile_context->skipped) {
+  const iree_benchmark_loom_selected_benchmark_t* selection =
+      &work_plan
+           ->selected_benchmarks[compile_item->representative_selection_index];
+  if (selection->skipped) {
     iree_benchmark_loom_benchmark_result_t benchmark_result = {
         .state = IREE_SV("skipped"),
     };
@@ -304,6 +285,8 @@ iree_status_t iree_benchmark_loom_prepare_hal_work_item(
         inout_failed_benchmark_count);
   }
 
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_hal_compile_context_initialize(
+      options, compile_item, compile_context));
   if (compile_context->uses_sequence) {
     const iree_benchmark_loom_hal_actual_provider_t* rejected_provider =
         compile_context->rejected_sequence_provider;

@@ -242,17 +242,16 @@ static iree_status_t loom_testbench_requirement_evaluate_op(
   return iree_ok_status();
 }
 
-iree_status_t loom_testbench_evaluate_case_requirements(
-    const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
+iree_status_t loom_testbench_evaluate_requirements(
+    const loom_module_t* module, const loom_region_t* body,
     const loom_testbench_requirement_provider_registry_t* registry,
     loom_testbench_requirement_result_t* out_result) {
   IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(case_plan);
+  IREE_ASSERT_ARGUMENT(body);
   IREE_ASSERT_ARGUMENT(registry);
   IREE_ASSERT_ARGUMENT(out_result);
   memset(out_result, 0, sizeof(*out_result));
 
-  loom_region_t* body = loom_check_case_body(case_plan->op);
   loom_block_t* block = NULL;
   loom_region_for_each_block(body, block) {
     loom_op_t* op = NULL;
